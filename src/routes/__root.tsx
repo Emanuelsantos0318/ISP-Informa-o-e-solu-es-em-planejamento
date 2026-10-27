@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AccessGate } from "@/components/auth/AccessGate";
 import { AuthProvider } from "@/lib/supabase/AuthProvider";
+import { ThemeProvider } from "@/lib/theme/ThemeProvider";
 
 function NotFoundComponent() {
   return (
@@ -110,7 +111,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
         },
         { rel: "stylesheet", href: appCss },
-        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+        { rel: "icon", href: "/isp-logo.png", type: "image/png" },
       ],
     }),
     shellComponent: RootShell,
@@ -122,8 +123,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('isp.theme')==='dark')document.documentElement.classList.add('dark')}catch{}",
+          }}
+        />
         <HeadContent />
       </head>
       <body>
@@ -140,9 +147,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AccessGate>
-          <Outlet />
-        </AccessGate>
+        <ThemeProvider>
+          <AccessGate>
+            <Outlet />
+          </AccessGate>
+        </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

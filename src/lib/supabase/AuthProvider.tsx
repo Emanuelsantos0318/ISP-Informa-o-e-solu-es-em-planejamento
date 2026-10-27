@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,6 +17,7 @@ type AuthState = {
   profile: UserProfile | null;
   ready: boolean;
   profileError: string | null;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -26,6 +28,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const refreshProfile = useCallback(async () => {
+    if (!client || !session) return;
+    const { data, error } = await client
+      .from("profiles")
+      .select(
+        "user_id, company_id, unit_id, full_name, role, status, avatar_path, theme_preference",
+      )
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (error || !data || data.status !== "active") {
+      setProfileError(
+        "Não foi possível atualizar seu perfil. Tente novamente.",
+      );
+      return;
+    }
+    setProfile(data as UserProfile);
+    setProfileError(null);
+  }, [client, session]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -45,7 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("user_id, company_id, unit_id, full_name, role, status")
+          .select(
+            "user_id, company_id, unit_id, full_name, role, status, avatar_path, theme_preference",
+          )
           .eq("user_id", nextSession.user.id)
           .maybeSingle();
         if (!active) return;
@@ -94,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ client, session, profile, ready, profileError }),
-    [client, session, profile, ready, profileError],
+    () => ({ client, session, profile, ready, profileError, refreshProfile }),
+    [client, session, profile, ready, profileError, refreshProfile],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

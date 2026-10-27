@@ -13,3 +13,6 @@ dist/
 *adminsdk*.json
 serviceAccountKey.json
 supabase/.temp/
+
+# Local Netlify folder
+.netlify

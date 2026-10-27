@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine } from "lucide-react";
+import { ArrowDownToLine, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,6 +34,7 @@ import {
 import { useCatalog } from "@/lib/supabase/useCatalog";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useMovementBatch } from "@/lib/supabase/useMovementBatch";
+import { DanfeImportDialog, type ImportedInvoice } from "./DanfeImportDialog";
 
 export function EntryDialog({
   open,
@@ -59,6 +60,9 @@ export function EntryDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [prefill, setPrefill] = useState<ProductPrefill>({});
+  const [danfeOpen, setDanfeOpen] = useState(false);
+  const [invoice, setInvoice] = useState<ImportedInvoice | null>(null);
+  const [invoiceHasMappedLines, setInvoiceHasMappedLines] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +77,9 @@ export function EntryDialog({
     setErrors([]);
     setIdempotencyKey(null);
     setSubmitError(null);
+    setInvoice(null);
+    setInvoiceHasMappedLines(false);
+    setDanfeOpen(false);
   }, [open, initialProduct]);
 
   const confirm = async () => {
@@ -80,6 +87,10 @@ export function EntryDialog({
     if (!date || !time)
       errs.push("Informe a data e o hor\u00e1rio da entrada.");
     if (items.length === 0) errs.push("Inclua ao menos um produto.");
+    if (invoice && !supplierId && !invoice.newSupplier)
+      errs.push(
+        "Selecione o fornecedor da nota ou revise os dados do novo fornecedor.",
+      );
     if (!unitId) errs.push("Selecione uma unidade ativa.");
     const operationalAt = operationalDateTimeToIso(date, time);
     if (!operationalAt)
@@ -98,6 +109,7 @@ export function EntryDialog({
         supplierId: supplierId || null,
         sourceReference: origin,
         note: notes,
+        invoice: invoice ?? undefined,
         items: items.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
@@ -150,7 +162,11 @@ export function EntryDialog({
             />
           </Field>
           <Field label="Fornecedor">
-            <Select value={supplierId} onValueChange={setSupplierId}>
+            <Select
+              value={supplierId}
+              onValueChange={setSupplierId}
+              disabled={catalog.suppliers.isLoading}
+            >
               <SelectTrigger>
                 <SelectValue
                   placeholder={
@@ -183,6 +199,29 @@ export function EntryDialog({
           </Field>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(invoice) || items.length > 0 || Boolean(selected)}
+            onClick={() => setDanfeOpen(true)}
+          >
+            <FileUp /> Importar DANFE por PDF
+          </Button>
+          {invoice && (
+            <span className="text-xs text-success">
+              Nota {invoice.invoiceNumber}, série {invoice.series} conferida ·{" "}
+              {invoice.accessKey ? "chave identificada" : "sem chave de acesso"}
+            </span>
+          )}
+          {!invoice && (items.length > 0 || selected) && (
+            <span className="text-xs text-muted-foreground">
+              Para vincular uma DANFE, importe-a antes de adicionar ou
+              selecionar produtos.
+            </span>
+          )}
+        </div>
+
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-foreground/80">
             Produtos recebidos
@@ -197,7 +236,12 @@ export function EntryDialog({
               O catálogo não pôde ser carregado para esta sessão.
             </BackendNotice>
           )}
-          {selected ? (
+          {invoiceHasMappedLines ? (
+            <p className="text-xs text-muted-foreground">
+              Itens vinculados à DANFE. Revise as quantidades antes de
+              confirmar.
+            </p>
+          ) : selected ? (
             <SelectedProductRow
               product={selected}
               mode="entrada"
@@ -273,6 +317,37 @@ export function EntryDialog({
           onOpenChange={setCreating}
           prefill={prefill}
           contextual
+        />
+        <DanfeImportDialog
+          open={danfeOpen}
+          onOpenChange={setDanfeOpen}
+          onRequestCreateProduct={(query) => {
+            setPrefill(prefillFromQuery(query));
+            setCreating(true);
+          }}
+          onApply={({
+            supplierId: nextSupplier,
+            invoice: nextInvoice,
+            items: importedItems,
+          }) => {
+            setSupplierId(nextSupplier);
+            setInvoice(nextInvoice);
+            setInvoiceHasMappedLines(importedItems.length > 0);
+            setSelected(null);
+            setOrigin(
+              `NF ${nextInvoice.invoiceNumber} / série ${nextInvoice.series}`,
+            );
+            if (importedItems.length > 0) {
+              setItems((current) => [
+                ...current,
+                ...importedItems.map((item) => ({
+                  ...item,
+                  key: crypto.randomUUID(),
+                })),
+              ]);
+            }
+            setSubmitError(null);
+          }}
         />
       </DialogContent>
     </Dialog>

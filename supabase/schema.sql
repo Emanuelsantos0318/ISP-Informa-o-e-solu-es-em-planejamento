@@ -553,6 +553,7 @@ CREATE TABLE IF NOT EXISTS "public"."suppliers" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "company_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
+    "cnpj" "text",
     "contact_name" "text",
     "email" "text",
     "phone" "text",
@@ -560,7 +561,8 @@ CREATE TABLE IF NOT EXISTS "public"."suppliers" (
     "status" "public"."record_status" DEFAULT 'active'::"public"."record_status" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "suppliers_name_check" CHECK ((("length"(TRIM(BOTH FROM "name")) >= 1) AND ("length"(TRIM(BOTH FROM "name")) <= 180)))
+    CONSTRAINT "suppliers_name_check" CHECK ((("length"(TRIM(BOTH FROM "name")) >= 1) AND ("length"(TRIM(BOTH FROM "name")) <= 180))),
+    CONSTRAINT "suppliers_cnpj_check" CHECK (("cnpj" IS NULL) OR ("cnpj" ~ '^\d{14}$'::"text"))
 );
 
 
@@ -782,6 +784,7 @@ CREATE INDEX "stock_movements_scope_history_idx" ON "public"."stock_movements" U
 
 
 CREATE INDEX "suppliers_company_status_name_idx" ON "public"."suppliers" USING "btree" ("company_id", "status", "name");
+CREATE UNIQUE INDEX "suppliers_company_cnpj_unique" ON "public"."suppliers" USING "btree" ("company_id", "cnpj") WHERE ("cnpj" IS NOT NULL);
 
 
 
@@ -1202,3 +1205,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+
+
+
+
+
+
+

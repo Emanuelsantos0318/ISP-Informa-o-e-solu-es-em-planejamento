@@ -22,8 +22,8 @@ import {
 import { DEFAULT_STOCK_SETTINGS, type StockSettings } from "@/lib/rules/stock";
 import { UNITS } from "@/lib/config/units";
 import { OPERATIONAL_TZ } from "@/lib/datetime";
-import { OPERATING_UNIT } from "@/lib/navigation";
 import { useAuth } from "@/lib/supabase/AuthProvider";
+import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { saveCompanyStockSettings } from "@/lib/supabase/stock-settings";
 import { useStockSettings } from "@/lib/supabase/useStockSettings";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
@@ -72,12 +72,18 @@ const defaults: SettingsForm = {
 
 function SettingsPage() {
   const { client, profile } = useAuth();
+  const scope = useOperationalScope();
+  const activeUnit = scope.units.find((unit) => unit.id === scope.unitId);
   const queryClient = useQueryClient();
   const settingsQuery = useStockSettings();
   const operationalQuery = useOperationalSettings();
   const settings = settingsQuery.data ?? DEFAULT_STOCK_SETTINGS;
   const canEdit =
-    profile?.role === "admin" || profile?.role === "stock_manager";
+    profile?.role === "admin" ||
+    profile?.role === "stock_manager" ||
+    profile?.role === "super_admin";
+  const canEditOperational =
+    profile?.role === "admin" || profile?.role === "super_admin";
   const [form, setForm] = useState<SettingsForm>(defaults);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -105,7 +111,12 @@ function SettingsPage() {
   }, [operationalQuery.data]);
 
   const saveOperational = async () => {
-    if (!client || !profile || profile.role !== "admin") return;
+    if (
+      !client ||
+      !profile ||
+      (profile.role !== "admin" && profile.role !== "super_admin")
+    )
+      return;
     const clock = (value: string) =>
       /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
         ? Number(value.slice(0, 2)) * 60 + Number(value.slice(3))
@@ -352,7 +363,7 @@ function SettingsPage() {
         actions={
           <Button
             disabled={
-              profile?.role !== "admin" ||
+              !canEditOperational ||
               operationalQuery.isLoading ||
               operationalQuery.isError ||
               operationalSaving
@@ -371,7 +382,7 @@ function SettingsPage() {
                   operationalForm.serviceLabels[service.code] ?? service.label
                 }
                 disabled={
-                  profile?.role !== "admin" ||
+                  !canEditOperational ||
                   operationalQuery.isLoading ||
                   operationalQuery.isError ||
                   operationalSaving
@@ -393,7 +404,7 @@ function SettingsPage() {
               <Input
                 value={operationalForm.exitTypeLabels[type.code] ?? type.label}
                 disabled={
-                  profile?.role !== "admin" ||
+                  !canEditOperational ||
                   operationalQuery.isLoading ||
                   operationalQuery.isError ||
                   operationalSaving
@@ -422,7 +433,7 @@ function SettingsPage() {
                   type="time"
                   value={rule.start}
                   disabled={
-                    profile?.role !== "admin" ||
+                    !canEditOperational ||
                     operationalQuery.isLoading ||
                     operationalQuery.isError ||
                     operationalSaving
@@ -445,7 +456,7 @@ function SettingsPage() {
                   type="time"
                   value={rule.end}
                   disabled={
-                    profile?.role !== "admin" ||
+                    !canEditOperational ||
                     operationalQuery.isLoading ||
                     operationalQuery.isError ||
                     operationalSaving
@@ -465,7 +476,7 @@ function SettingsPage() {
                 <Input
                   value={rule.label}
                   disabled={
-                    profile?.role !== "admin" ||
+                    !canEditOperational ||
                     operationalQuery.isLoading ||
                     operationalQuery.isError ||
                     operationalSaving
@@ -496,7 +507,7 @@ function SettingsPage() {
                     <Select
                       value={rule.kind}
                       disabled={
-                        profile?.role !== "admin" ||
+                        !canEditOperational ||
                         operationalQuery.isLoading ||
                         operationalQuery.isError ||
                         operationalSaving
@@ -560,7 +571,7 @@ function SettingsPage() {
                       <Select
                         value={rule.service}
                         disabled={
-                          profile?.role !== "admin" ||
+                          !canEditOperational ||
                           operationalQuery.isLoading ||
                           operationalQuery.isError ||
                           operationalSaving
@@ -609,7 +620,7 @@ function SettingsPage() {
             {operationalMessage}
           </p>
         )}
-        {profile?.role !== "admin" && (
+        {!canEditOperational && (
           <p className="mt-4 text-xs text-muted-foreground">
             Somente administradores podem alterar essas regras.
           </p>
@@ -619,7 +630,10 @@ function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Unidade operacional" className="lg:col-span-1">
           <dl className="grid gap-3 text-sm">
-            <Row label="Unidade" value={OPERATING_UNIT} />
+            <Row
+              label="Unidade"
+              value={activeUnit?.name ?? "Sem unidade selecionada"}
+            />
             <Row label="Fuso horário" value={`${OPERATIONAL_TZ} (UTC−3)`} />
             <Row label="Formato" value="dd/mm/aaaa · 24h" />
           </dl>

@@ -1,33 +1,29 @@
-# ISP MVP — Gestão de Estoque
+# Welcome to your Lovable project
 
-Aplicação de gestão de estoque do ISP, com autenticação e persistência no Supabase.
+This project was built with [Lovable](https://lovable.dev).
 
-## Desenvolvimento local
+## Build with Lovable
 
-1. Instale Node.js LTS.
-2. Instale as dependências: `npm ci`.
-3. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` com os valores do projeto Supabase autorizado.
-4. Inicie a aplicação: `npm run dev`.
+Open your project in the [Lovable editor](https://lovable.dev) and keep building.
 
-## Banco Supabase
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
+- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
 
-As alterações de esquema ficam versionadas em `supabase/migrations`. Para vincular o projeto e aplicar migrações:
+## Development
 
-```powershell
-npx supabase@latest login
-npx supabase@latest link --project-ref xfflwtnfzxwpyydeexbx
-npx supabase@latest db push --linked
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+
+```sh
+git clone <this-repository-url>
+cd <repository-name>
+npm i
+npm run dev
 ```
 
-Confira o histórico remoto antes de reparar migrações. Nunca use `service_role`, senha PostgreSQL ou credenciais administrativas no frontend. `VITE_SUPABASE_PUBLISHABLE_KEY` deve conter somente a chave pública do projeto.
+## Built with
 
-## Comandos
-
-- `npm run dev`: inicia o servidor local.
-- `npm run build`: gera a aplicação de produção.
-- `npm run lint`: valida estilo e regras ESLint.
-- `npm run test`: executa os testes unitários.
-
-## Segurança
-
-Não versione `.env.local`, chaves secretas, senhas ou chaves de service account. O acesso a dados é controlado por políticas RLS e pelas migrações do Supabase.
+- TanStack Start
+- TypeScript
+- React
+- Tailwind CSS

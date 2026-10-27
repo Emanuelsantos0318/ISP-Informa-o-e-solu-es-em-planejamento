@@ -119,6 +119,52 @@
   --shadow-raised-value: 0 8px 24px -8px oklch(0.23 0.035 257 / 0.16);
 }
 
+.dark {
+  --background: oklch(0.205 0.024 257);
+  --foreground: oklch(0.94 0.012 252);
+  --card: oklch(0.245 0.027 257);
+  --card-foreground: oklch(0.94 0.012 252);
+  --popover: oklch(0.255 0.028 257);
+  --popover-foreground: oklch(0.94 0.012 252);
+  --primary: oklch(0.75 0.12 252);
+  --primary-foreground: oklch(0.22 0.04 257);
+  --primary-soft: oklch(0.32 0.065 257);
+  --secondary: oklch(0.3 0.026 257);
+  --secondary-foreground: oklch(0.91 0.012 252);
+  --muted: oklch(0.285 0.024 257);
+  --muted-foreground: oklch(0.72 0.018 252);
+  --accent: oklch(0.33 0.04 257);
+  --accent-foreground: oklch(0.95 0.012 252);
+  --destructive: oklch(0.66 0.19 27);
+  --destructive-foreground: oklch(0.98 0.006 25);
+  --destructive-soft: oklch(0.32 0.075 27);
+  --success: oklch(0.72 0.13 155);
+  --success-foreground: oklch(0.22 0.045 155);
+  --success-soft: oklch(0.32 0.055 155);
+  --warning: oklch(0.79 0.15 72);
+  --warning-foreground: oklch(0.25 0.055 65);
+  --warning-soft: oklch(0.33 0.055 72);
+  --border: oklch(0.37 0.025 257);
+  --input: oklch(0.39 0.025 257);
+  --ring: oklch(0.72 0.12 252);
+  --chart-1: oklch(0.75 0.12 252);
+  --chart-2: oklch(0.72 0.13 155);
+  --chart-3: oklch(0.79 0.15 72);
+  --chart-4: oklch(0.7 0.1 240);
+  --chart-5: oklch(0.72 0.09 195);
+  --sidebar: oklch(0.17 0.035 260);
+  --sidebar-foreground: oklch(0.88 0.018 255);
+  --sidebar-primary: oklch(0.79 0.15 72);
+  --sidebar-primary-foreground: oklch(0.22 0.05 60);
+  --sidebar-accent: oklch(0.27 0.05 260);
+  --sidebar-accent-foreground: oklch(0.96 0.008 252);
+  --sidebar-border: oklch(0.31 0.04 260);
+  --sidebar-ring: oklch(0.79 0.15 72);
+  --sidebar-muted: oklch(0.69 0.025 255);
+  --shadow-card-value: 0 1px 3px 0 oklch(0.08 0.02 257 / 0.3);
+  --shadow-raised-value: 0 8px 24px -8px oklch(0.08 0.02 257 / 0.55);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -153,4 +199,34 @@
     var(--color-card) 55%,
     var(--color-primary-soft)
   );
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #report-preview,
+  #report-preview * {
+    visibility: visible !important;
+  }
+
+  #report-preview {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    overflow: visible !important;
+    color: #111;
+  }
+
+  #report-preview table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  #report-preview th,
+  #report-preview td {
+    border: 1px solid #999;
+    padding: 4px 6px;
+  }
 }

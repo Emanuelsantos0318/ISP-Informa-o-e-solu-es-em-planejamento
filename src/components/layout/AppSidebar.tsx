@@ -1,5 +1,4 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Boxes } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,7 +13,9 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { NAV_ITEMS, OPERATING_UNIT, type NavItem } from "@/lib/navigation";
+import { NAV_ITEMS, type NavItem } from "@/lib/navigation";
+import { useAuth } from "@/lib/supabase/AuthProvider";
+import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 
 const GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "operacao", label: "Operação" },
@@ -24,6 +25,12 @@ const GROUPS: { id: NavItem["group"]; label: string }[] = [
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
+  const { profile } = useAuth();
+  const scope = useOperationalScope();
+  const activeUnit = scope.units.find((unit) => unit.id === scope.unitId);
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.superAdminOnly || profile?.role === "super_admin",
+  );
 
   return (
     <Sidebar collapsible="icon">
@@ -33,9 +40,13 @@ export function AppSidebar() {
           className="flex items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           onClick={() => isMobile && setOpenMobile(false)}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <Boxes className="size-4.5" />
-          </span>
+          <img
+            src="/isp-logo.png"
+            alt="InfoSolutions Planning"
+            className="size-10 shrink-0 object-contain group-data-[collapsible=icon]:size-8"
+            width={40}
+            height={40}
+          />
           <span className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-[15px] font-semibold tracking-tight text-sidebar-accent-foreground">
               ISP
@@ -55,30 +66,32 @@ export function AppSidebar() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {NAV_ITEMS.filter((i) => i.group === group.id).map((item) => {
-                  const active =
-                    item.to === "/"
-                      ? pathname === "/"
-                      : pathname.startsWith(item.to);
-                  return (
-                    <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={active}
-                        tooltip={item.label}
-                        className="h-9 data-[active=true]:font-medium data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)]"
-                      >
-                        <Link
-                          to={item.to}
-                          onClick={() => isMobile && setOpenMobile(false)}
+                {visibleItems
+                  .filter((i) => i.group === group.id)
+                  .map((item) => {
+                    const active =
+                      item.to === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(item.to);
+                    return (
+                      <SidebarMenuItem key={item.to}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={active}
+                          tooltip={item.label}
+                          className="h-9 data-[active=true]:font-medium data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)]"
                         >
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
+                          <Link
+                            to={item.to}
+                            onClick={() => isMobile && setOpenMobile(false)}
+                          >
+                            <item.icon />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -91,12 +104,12 @@ export function AppSidebar() {
             ISP — Gestão de Estoque
           </p>
           <p className="text-[11px] text-sidebar-muted">
-            Unidade: {OPERATING_UNIT}
+            Unidade: {activeUnit?.name ?? "Sem unidade selecionada"}
           </p>
         </div>
         <div
           className="hidden text-center text-[10px] font-semibold text-sidebar-muted group-data-[collapsible=icon]:block"
-          title={`ISP · ${OPERATING_UNIT}`}
+          title={`ISP · ${activeUnit?.name ?? "Sem unidade"}`}
         >
           ISP
         </div>

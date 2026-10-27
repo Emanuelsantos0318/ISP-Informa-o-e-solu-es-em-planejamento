@@ -4,6 +4,12 @@
 # working directory name when running `supabase init`.
 project_id = "ISP_MVP"
 
+[functions.admin-invite-user]
+verify_jwt = true
+
+[functions.admin-create-user]
+verify_jwt = true
+
 [api]
 enabled = true
 # Port to use for the API URL.

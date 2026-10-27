@@ -10,16 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AceitarConviteRouteImport } from './routes/aceitar-convite'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as MovimentacoesRouteImport } from './routes/movimentacoes'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanejamentoRouteImport } from './routes/planejamento'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
+import { Route as UnidadesRouteImport } from './routes/unidades'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AceitarConviteRoute = AceitarConviteRouteImport.update({
+  id: '/aceitar-convite',
+  path: '/aceitar-convite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CadastroRoute = CadastroRouteImport.update({
@@ -42,9 +51,24 @@ const NotificacoesRoute = NotificacoesRouteImport.update({
   path: '/notificacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlanejamentoRoute = PlanejamentoRouteImport.update({
   id: '/planejamento',
   path: '/planejamento',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnidadesRoute = UnidadesRouteImport.update({
+  id: '/unidades',
+  path: '/unidades',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UsuariosRoute = UsuariosRouteImport.update({
@@ -55,69 +79,97 @@ const UsuariosRoute = UsuariosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/perfil'
     | '/planejamento'
+    | '/redefinir-senha'
+    | '/unidades'
     | '/usuarios'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/perfil'
     | '/planejamento'
+    | '/redefinir-senha'
+    | '/unidades'
     | '/usuarios'
   id:
     | '__root__'
     | '/'
+    | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/perfil'
     | '/planejamento'
+    | '/redefinir-senha'
+    | '/unidades'
     | '/usuarios'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AceitarConviteRoute: typeof AceitarConviteRoute
   CadastroRoute: typeof CadastroRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   MovimentacoesRoute: typeof MovimentacoesRoute
   NotificacoesRoute: typeof NotificacoesRoute
+  PerfilRoute: typeof PerfilRoute
   PlanejamentoRoute: typeof PlanejamentoRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  UnidadesRoute: typeof UnidadesRoute
   UsuariosRoute: typeof UsuariosRoute
 }
 
@@ -128,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/aceitar-convite': {
+      id: '/aceitar-convite'
+      path: '/aceitar-convite'
+      fullPath: '/aceitar-convite'
+      preLoaderRoute: typeof AceitarConviteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cadastro': {
@@ -158,11 +217,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/planejamento': {
       id: '/planejamento'
       path: '/planejamento'
       fullPath: '/planejamento'
       preLoaderRoute: typeof PlanejamentoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unidades': {
+      id: '/unidades'
+      path: '/unidades'
+      fullPath: '/unidades'
+      preLoaderRoute: typeof UnidadesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/usuarios': {
@@ -177,11 +257,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AceitarConviteRoute: AceitarConviteRoute,
   CadastroRoute: CadastroRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   MovimentacoesRoute: MovimentacoesRoute,
   NotificacoesRoute: NotificacoesRoute,
+  PerfilRoute: PerfilRoute,
   PlanejamentoRoute: PlanejamentoRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
+  UnidadesRoute: UnidadesRoute,
   UsuariosRoute: UsuariosRoute,
 }
 export const routeTree = rootRouteImport

@@ -13,10 +13,12 @@ export function ProductPicker({
   products,
   onSelect,
   onRequestCreate,
+  allowCreate = true,
 }: {
   products: Product[];
   onSelect: (p: Product) => void;
   onRequestCreate: (query: string) => void;
+  allowCreate?: boolean | undefined;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[] | null>(null);
@@ -67,7 +69,7 @@ export function ProductPicker({
         </Button>
       </div>
 
-      {results !== null && results.length === 0 && (
+      {results !== null && results.length === 0 && allowCreate && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
           <div className="flex items-center gap-2 text-sm">
             <PackageX className="size-4 text-muted-foreground" />

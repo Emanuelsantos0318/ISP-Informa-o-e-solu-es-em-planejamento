@@ -6,11 +6,12 @@ export type MovementBatchItem = {
   quantity: number;
   lotNumber?: string | undefined;
   expiresOn?: string | undefined;
+  adjustmentDirection?: "increase" | "decrease" | null | undefined;
 };
 
 export type MovementBatchInput = {
   unitId: string;
-  movementType: "entry" | "exit";
+  movementType: "entry" | "exit" | "adjustment" | "loss";
   operationalAt: string;
   idempotencyKey: string;
   items: MovementBatchItem[];
@@ -19,15 +20,41 @@ export type MovementBatchInput = {
   supplierId?: string | null | undefined;
   sourceReference?: string | null | undefined;
   note?: string | null | undefined;
+  invoice?:
+    | {
+        accessKey: string | null;
+        invoiceNumber: string;
+        series: string;
+        issueDate: string | null;
+        supplierCnpj: string | null;
+        invoiceTotal: string | null;
+        extractedText: string;
+        parsedData: Record<string, unknown>;
+        newSupplier: {
+          name: string;
+          cnpj: string | null;
+          tradeName: string | null;
+          stateRegistration: string | null;
+          address: string | null;
+          city: string | null;
+          state: string | null;
+          postalCode: string | null;
+          phone: string | null;
+          email: string | null;
+        } | null;
+      }
+    | undefined;
 };
 
 export async function recordMovementBatch(
   client: SupabaseClient,
   input: MovementBatchInput,
 ) {
-  const { data, error } = await client.rpc("record_stock_movement_batch", {
+  const procedure = input.invoice
+    ? "record_stock_invoice_movement_batch"
+    : "record_stock_movement_batch";
+  const params = {
     p_unit_id: input.unitId,
-    p_movement_type: input.movementType,
     p_operational_at: input.operationalAt,
     p_idempotency_key: input.idempotencyKey,
     p_items: input.items.map((item) => ({
@@ -35,13 +62,32 @@ export async function recordMovementBatch(
       quantity: item.quantity,
       lot_number: item.lotNumber ?? null,
       expires_on: item.expiresOn ?? null,
+      adjustment_direction: item.adjustmentDirection ?? null,
     })),
-    p_service_code: input.serviceCode ?? null,
-    p_exit_type_code: input.exitTypeCode ?? null,
     p_supplier_id: input.supplierId ?? null,
     p_source_reference: input.sourceReference ?? null,
     p_note: input.note ?? null,
-  });
+    ...(input.invoice
+      ? {
+          p_invoice: {
+            access_key: input.invoice.accessKey,
+            invoice_number: input.invoice.invoiceNumber,
+            series: input.invoice.series,
+            issue_date: input.invoice.issueDate,
+            supplier_cnpj: input.invoice.supplierCnpj,
+            invoice_total: input.invoice.invoiceTotal,
+            extracted_text: input.invoice.extractedText,
+            parsed_data: input.invoice.parsedData,
+            new_supplier: input.invoice.newSupplier,
+          },
+        }
+      : {
+          p_movement_type: input.movementType,
+          p_service_code: input.serviceCode ?? null,
+          p_exit_type_code: input.exitTypeCode ?? null,
+        }),
+  };
+  const { data, error } = await client.rpc(procedure, params);
 
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") {
@@ -53,6 +99,12 @@ export async function recordMovementBatch(
       throw new Error(
         "Seu perfil n\u00e3o pode registrar movimentos nesta unidade.",
       );
+    }
+    if (
+      error.code === "23505" ||
+      error.message.toLowerCase().includes("already been recorded")
+    ) {
+      throw new Error("Esta nota fiscal já foi registrada no estoque.");
     }
     const message = error.message.toLowerCase();
     if (message.includes("insufficient stock")) {

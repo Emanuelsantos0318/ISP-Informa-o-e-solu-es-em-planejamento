@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Bell,
+  Building2,
   ClipboardList,
   LayoutDashboard,
   LineChart,
@@ -17,10 +18,12 @@ export type NavItem = {
     | "/planejamento"
     | "/usuarios"
     | "/notificacoes"
-    | "/configuracoes";
+    | "/configuracoes"
+    | "/unidades";
   label: string;
   icon: LucideIcon;
   group: "operacao" | "administracao";
+  superAdminOnly?: boolean;
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -56,9 +59,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     group: "administracao",
   },
+  {
+    to: "/unidades",
+    label: "Unidades",
+    icon: Building2,
+    group: "administracao",
+    superAdminOnly: true,
+  },
 ];
-
-export const OPERATING_UNIT = "LBGS · HGRS";
 
 export function titleForPath(pathname: string): string {
   const clean = pathname.replace(/\/+$/, "") || "/";

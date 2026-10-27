@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/types";
 import { EntryDialog } from "./EntryDialog";
 import { ExitDialog } from "./ExitDialog";
+import { StockCorrectionDialog } from "./StockCorrectionDialog";
+import { Scale } from "lucide-react";
+import { useAuth } from "@/lib/supabase/AuthProvider";
 
 export type MovementRequest = {
   key: string;
@@ -23,7 +26,13 @@ export function MovementActions({
 }) {
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const [initialProduct, setInitialProduct] = useState<Product | undefined>();
+  const { profile } = useAuth();
+  const canCorrect =
+    profile?.role === "admin" ||
+    profile?.role === "stock_manager" ||
+    profile?.role === "super_admin";
 
   useEffect(() => {
     if (!request) return;
@@ -46,6 +55,15 @@ export function MovementActions({
           <Button size={size} onClick={() => setExitOpen(true)}>
             <ArrowUpFromLine /> Nova saída
           </Button>
+          {canCorrect && (
+            <Button
+              variant="outline"
+              size={size}
+              onClick={() => setCorrectionOpen(true)}
+            >
+              <Scale /> Ajuste / perda
+            </Button>
+          )}
         </>
       )}
       <EntryDialog
@@ -57,6 +75,10 @@ export function MovementActions({
         open={exitOpen}
         onOpenChange={setExitOpen}
         initialProduct={initialProduct}
+      />
+      <StockCorrectionDialog
+        open={correctionOpen}
+        onOpenChange={setCorrectionOpen}
       />
     </>
   );

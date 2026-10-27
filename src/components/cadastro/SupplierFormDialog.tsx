@@ -26,10 +26,14 @@ const empty = {
   legalName: "",
   tradeName: "",
   cnpj: "",
+  stateRegistration: "",
   contactName: "",
   phone: "",
   email: "",
   address: "",
+  city: "",
+  state: "",
+  postalCode: "",
   notes: "",
   active: true,
 };
@@ -68,16 +72,18 @@ export function SupplierFormDialog({
     setErrors({});
     if (!client || !profile)
       return setBackendError("Conecte uma sessão autorizada antes de salvar.");
-    if (parsed.data.tradeName || parsed.data.cnpj || parsed.data.address) {
-      return setBackendError(
-        "O banco atual não possui campos para nome fantasia, CNPJ e endereço. Remova esses valores ou aguarde a migração desses campos.",
-      );
-    }
     setSaving(true);
     try {
       const { error } = await client.from("suppliers").insert({
         company_id: profile.company_id,
         name: parsed.data.legalName,
+        cnpj: parsed.data.cnpj.replace(/\D/g, "") || null,
+        trade_name: parsed.data.tradeName || null,
+        state_registration: parsed.data.stateRegistration || null,
+        address: parsed.data.address || null,
+        city: parsed.data.city || null,
+        state: parsed.data.state?.toUpperCase() || null,
+        postal_code: parsed.data.postalCode?.replace(/\D/g, "") || null,
         contact_name: parsed.data.contactName || null,
         phone: parsed.data.phone || null,
         email: parsed.data.email || null,
@@ -129,6 +135,13 @@ export function SupplierFormDialog({
               onChange={(e) => set("tradeName", e.target.value)}
             />
           </Field>
+          <Field label="Inscrição estadual" htmlFor="s-ie">
+            <Input
+              id="s-ie"
+              value={form.stateRegistration}
+              onChange={(e) => set("stateRegistration", e.target.value)}
+            />
+          </Field>
           <Field label="CNPJ" htmlFor="s-cnpj" error={errors.cnpj}>
             <Input
               id="s-cnpj"
@@ -172,6 +185,28 @@ export function SupplierFormDialog({
               id="s-address"
               value={form.address}
               onChange={(e) => set("address", e.target.value)}
+            />
+          </Field>
+          <Field label="Município" htmlFor="s-city">
+            <Input
+              id="s-city"
+              value={form.city}
+              onChange={(e) => set("city", e.target.value)}
+            />
+          </Field>
+          <Field label="UF" htmlFor="s-state">
+            <Input
+              id="s-state"
+              maxLength={2}
+              value={form.state}
+              onChange={(e) => set("state", e.target.value)}
+            />
+          </Field>
+          <Field label="CEP" htmlFor="s-postal-code">
+            <Input
+              id="s-postal-code"
+              value={form.postalCode}
+              onChange={(e) => set("postalCode", e.target.value)}
             />
           </Field>
           <Field

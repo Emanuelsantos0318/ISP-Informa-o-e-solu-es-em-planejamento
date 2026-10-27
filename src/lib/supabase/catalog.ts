@@ -14,6 +14,13 @@ export type SupplierRecord = {
   id: string;
   company_id: string;
   name: string;
+  cnpj: string | null;
+  trade_name: string | null;
+  state_registration: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
   contact_name: string | null;
   email: string | null;
   phone: string | null;
@@ -47,7 +54,9 @@ export async function listCategories(
 export async function listSuppliers(client: SupabaseClient, companyId: string) {
   const { data, error } = await client
     .from("suppliers")
-    .select("id, company_id, name, contact_name, email, phone, notes, status")
+    .select(
+      "id, company_id, name, cnpj, trade_name, state_registration, address, city, state, postal_code, contact_name, email, phone, notes, status",
+    )
     .eq("company_id", companyId)
     .order("name")
     .limit(500);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Bell, CalendarDays, LogOut, UserRound } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,11 +10,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -25,6 +20,16 @@ import { formatDateLong } from "@/lib/datetime";
 import { titleForPath } from "@/lib/navigation";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { ProfileAvatar } from "@/components/common/ProfileAvatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function useToday() {
   const [label, setLabel] = useState<string | null>(null);
@@ -105,29 +110,34 @@ export function AppHeader() {
             </SelectContent>
           </Select>
         )}
-        <div className="flex items-center gap-2 rounded-md border px-2 py-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <UserRound className="size-4" />
+        <ThemeToggle />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="flex h-10 gap-2 px-2">
+              <ProfileAvatar className="size-7" />
+              <span className="hidden max-w-40 truncate text-sm sm:inline">
+                {profile?.full_name}
               </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {profile?.role ?? "Usuário autorizado"}
-            </TooltipContent>
-          </Tooltip>
-          <span className="hidden max-w-40 truncate text-sm sm:inline">
-            {profile?.full_name}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Sair do sistema"
-            onClick={() => void client?.auth.signOut()}
-          >
-            <LogOut className="size-4" />
-          </Button>
-        </div>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <span className="block truncate">{profile?.full_name}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {profile?.role}
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/perfil">
+                <UserRound /> Meu perfil
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void client?.auth.signOut()}>
+              <LogOut /> Sair do sistema
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

@@ -15,7 +15,9 @@ export function useMovementBatch() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["movements"] }),
+        queryClient.invalidateQueries({ queryKey: ["stock-invoices"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-snapshot"] }),
       ]);
     },
   });

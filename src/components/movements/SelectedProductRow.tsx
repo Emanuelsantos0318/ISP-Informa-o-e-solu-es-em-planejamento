@@ -14,7 +14,7 @@ export function SelectedProductRow({
   onCancel,
 }: {
   product: Product;
-  mode: "entrada" | "saida";
+  mode: "entrada" | "saida" | "ajuste" | "perda";
   onAdd: (item: Omit<MovementItemDraft, "key">) => void;
   onCancel: () => void;
 }) {
@@ -32,14 +32,12 @@ export function SelectedProductRow({
       return setError(
         `A unidade ${unit.label.toLowerCase()} aceita apenas números inteiros.`,
       );
-    if (mode === "saida" && n > product.balance)
+    if ((mode === "saida" || mode === "perda") && n > product.balance)
       return setError(
         `Quantidade acima do saldo disponível (${product.balance} ${unitShort(product.unit)}).`,
       );
-    if (mode === "entrada" && product.lotControl && !lot.trim())
-      return setError("Informe o lote.");
-    if (mode === "entrada" && product.expiryControl && !expiry)
-      return setError("Informe a validade.");
+    if ((mode === "entrada" || mode === "ajuste") && expiry && !lot.trim())
+      return setError("Informe o lote para registrar a validade.");
     setError(null);
     onAdd({
       product,
@@ -87,12 +85,12 @@ export function SelectedProductRow({
             onChange={(e) => setQty(e.target.value)}
           />
         </Field>
-        {mode === "entrada" && product.lotControl && (
+        {(mode === "entrada" || mode === "ajuste") && (
           <Field label="Lote" className="w-36">
             <Input value={lot} onChange={(e) => setLot(e.target.value)} />
           </Field>
         )}
-        {mode === "entrada" && product.expiryControl && (
+        {(mode === "entrada" || mode === "ajuste") && (
           <Field label="Validade" className="w-40">
             <Input
               type="date"

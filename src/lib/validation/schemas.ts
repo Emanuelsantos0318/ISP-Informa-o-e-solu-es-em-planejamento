@@ -34,7 +34,7 @@ export const productSchema = z
     categoryId: z.string().min(1, "Selecione a categoria."),
     description: z.string().trim().max(500).optional(),
     unit: z.enum(unitCodes, {
-      errorMap: () => ({ message: "Selecione a unidade de medida." }),
+      message: "Selecione a unidade de medida.",
     }),
     minStock: z.coerce
       .number()
@@ -58,6 +58,7 @@ export const supplierSchema = z.object({
     .min(2, "Informe o nome ou razão social.")
     .max(150),
   tradeName: z.string().trim().max(150).optional(),
+  stateRegistration: z.string().trim().max(24).optional(),
   cnpj: z
     .string()
     .trim()
@@ -72,6 +73,9 @@ export const supplierSchema = z.object({
       "E-mail inválido.",
     ),
   address: z.string().trim().max(250).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(2).optional(),
+  postalCode: z.string().trim().max(9).optional(),
   notes: z.string().trim().max(500).optional(),
   active: z.boolean(),
 });

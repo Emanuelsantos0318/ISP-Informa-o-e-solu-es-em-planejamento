@@ -1,13 +1,19 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, LoaderCircle, LogIn, ShieldCheck } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/common/Field";
 import { AppShell } from "@/components/layout/AppShell";
 import { OperationalScopeProvider } from "@/lib/supabase/OperationalScopeProvider";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export function AccessGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const isInviteAcceptance =
+    router.state.location.pathname === "/aceitar-convite";
+  const isPasswordReset = router.state.location.pathname === "/redefinir-senha";
   const { client, session, profile, ready, profileError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +28,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       />
     );
   }
+  if (isInviteAcceptance || isPasswordReset) return <>{children}</>;
   if (!ready)
     return (
       <Message
@@ -55,10 +62,12 @@ export function AccessGate({ children }: { children: ReactNode }) {
     setError(null);
     setBusy(true);
     try {
-      const { error: signInError } = await client.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const identifier = email.trim().toLowerCase();
+      const credentials = identifier.includes("@")
+        ? { email: identifier, password }
+        : { email: `${identifier}@users.isp.invalid`, password };
+      const { error: signInError } =
+        await client.auth.signInWithPassword(credentials);
       if (signInError)
         setError("E-mail ou senha inválidos, ou conta ainda não confirmada.");
     } catch {
@@ -69,12 +78,19 @@ export function AccessGate({ children }: { children: ReactNode }) {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+    <main className="relative flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <section className="surface w-full max-w-md p-6 sm:p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <ShieldCheck className="size-5" />
-          </span>
+        <div className="mb-6 flex items-center gap-4">
+          <img
+            src="/isp-logo.png"
+            alt="Logo InfoSolutions Planning"
+            className="size-24 shrink-0 object-contain"
+            width={96}
+            height={96}
+          />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
               ISP
@@ -89,10 +105,15 @@ export function AccessGate({ children }: { children: ReactNode }) {
           onSubmit={(event) => void submit(event)}
           className="mt-6 grid gap-4"
         >
-          <Field label="E-mail" htmlFor="login-email" required>
+          <Field
+            label="E-mail ou nome de usuário"
+            htmlFor="login-email"
+            required
+          >
             <Input
               id="login-email"
-              type="email"
+              type="text"
+              autoCapitalize="none"
               autoComplete="username"
               required
               value={email}
