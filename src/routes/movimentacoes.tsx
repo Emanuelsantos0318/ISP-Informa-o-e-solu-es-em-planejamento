@@ -79,6 +79,30 @@ function MovementsPage() {
     useState<StockInvoiceRecord | null>(null);
   const invoiceText = useInvoiceText(selectedInvoice?.id ?? null);
   const dirty = JSON.stringify(f) !== JSON.stringify(initial);
+  const serviceOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const service of SERVICE_OPTIONS)
+      options.set(
+        service.code,
+        operational.serviceLabels[service.code] ?? service.label,
+      );
+    for (const movement of snapshot.data?.movements ?? [])
+      if (movement.service && !options.has(movement.service))
+        options.set(movement.service, movement.service);
+    return [...options.entries()];
+  }, [snapshot.data?.movements, operational.serviceLabels]);
+  const exitTypeOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const exitType of EXIT_TYPES)
+      options.set(
+        exitType.code,
+        operational.exitTypeLabels[exitType.code] ?? exitType.label,
+      );
+    for (const movement of snapshot.data?.movements ?? [])
+      if (movement.exitType && !options.has(movement.exitType))
+        options.set(movement.exitType, movement.exitType);
+    return [...options.entries()];
+  }, [snapshot.data?.movements, operational.exitTypeLabels]);
   const rows = useMemo(
     () =>
       (snapshot.data?.movements ?? []).filter((movement) => {
@@ -118,6 +142,8 @@ function MovementsPage() {
       }),
     [snapshot.data?.movements, f],
   );
+  const historicalRows = rows.filter((movement) => movement.legacy).length;
+  const currentRows = rows.length - historicalRows;
 
   return (
     <div className="flex flex-col gap-6">
@@ -176,9 +202,9 @@ function MovementsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                {SERVICE_OPTIONS.map((s) => (
-                  <SelectItem key={s.code} value={s.code}>
-                    {operational.serviceLabels[s.code] ?? s.label}
+                {serviceOptions.map(([code, label]) => (
+                  <SelectItem key={code} value={code}>
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -194,9 +220,9 @@ function MovementsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                {EXIT_TYPES.map((t) => (
-                  <SelectItem key={t.code} value={t.code}>
-                    {operational.exitTypeLabels[t.code] ?? t.label}
+                {exitTypeOptions.map(([code, label]) => (
+                  <SelectItem key={code} value={code}>
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -231,10 +257,33 @@ function MovementsPage() {
       )}
       {snapshot.isError && (
         <BackendNotice>
-          Não foi possível consultar o histórico. Confira as permissões da conta
-          e a conexão.
+          Não foi possível consultar o histórico. Confira as permissões, a
+          conexão e se a migração do histórico legado foi aplicada.
         </BackendNotice>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Panel title="Registros no filtro">
+          <p className="text-2xl font-semibold tabular-nums">{rows.length}</p>
+          <p className="text-xs text-muted-foreground">
+            Lançamentos que correspondem aos filtros atuais.
+          </p>
+        </Panel>
+        <Panel title="Histórico importado">
+          <p className="text-2xl font-semibold tabular-nums">
+            {historicalRows}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Saídas antigas preservadas sem alterar o saldo atual.
+          </p>
+        </Panel>
+        <Panel title="Movimentações do ISP">
+          <p className="text-2xl font-semibold tabular-nums">{currentRows}</p>
+          <p className="text-xs text-muted-foreground">
+            Registros operacionais feitos no sistema atual.
+          </p>
+        </Panel>
+      </div>
 
       <Panel title="Histórico" bodyClassName="p-0">
         {snapshot.data && rows.length === 0 ? (
@@ -293,8 +342,15 @@ function MovementsPage() {
                           </td>
                           <td className="px-4 py-3">
                             {item.name}
+                            {movement.legacy && (
+                              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                Histórico importado
+                              </span>
+                            )}
                             <span className="block text-xs text-muted-foreground">
-                              {item.sku}
+                              {movement.legacy
+                                ? `ID de origem ${movement.sourceReference ?? "—"}${item.sku ? ` · Código ${item.sku}` : ""}`
+                                : item.sku}
                               {item.lotNumber
                                 ? ` · Lote ${item.lotNumber}`
                                 : ""}
@@ -304,7 +360,10 @@ function MovementsPage() {
                             {item.quantity.toLocaleString("pt-BR")} {item.unit}
                           </td>
                           <td className="px-4 py-3">
-                            {movement.userName ?? movement.userId.slice(0, 8)}
+                            {movement.userName ??
+                              (movement.userId
+                                ? movement.userId.slice(0, 8)
+                                : "—")}
                           </td>
                           <td className="px-4 py-3">
                             {movement.service

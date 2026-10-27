@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -76,6 +77,29 @@ const ROLES: {
 const roleLabel = (role: string) =>
   ROLES.find((item) => item.value === role)?.label ?? role;
 
+async function functionErrorMessage(
+  error: Error,
+  data: unknown,
+): Promise<string> {
+  const responseBody = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") return null;
+    const message = (value as Record<string, unknown>)["error"];
+    return typeof message === "string" && message.trim() ? message : null;
+  };
+  const responseMessage = responseBody(data);
+  if (responseMessage) return responseMessage;
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.clone().json();
+      const message = responseBody(body);
+      if (message) return message;
+    } catch {
+      // Keep the Supabase error message when the response is not JSON.
+    }
+  }
+  return error.message;
+}
+
 function UsersPage() {
   const { client, profile } = useAuth();
   const { units } = useOperationalScope();
@@ -130,7 +154,7 @@ function UsersPage() {
           },
         },
       );
-      if (error) throw new Error(data?.error ?? error.message);
+      if (error) throw new Error(await functionErrorMessage(error, data));
       if (data?.error) throw new Error(data.error);
       return data as { inviteUrl: string };
     },
@@ -170,7 +194,7 @@ function UsersPage() {
           },
         },
       );
-      if (error) throw new Error(data?.error ?? error.message);
+      if (error) throw new Error(await functionErrorMessage(error, data));
       if (data?.error) throw new Error(data.error);
       return data as { username: string };
     },

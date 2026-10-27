@@ -29,7 +29,9 @@ export function AppSidebar() {
   const scope = useOperationalScope();
   const activeUnit = scope.units.find((unit) => unit.id === scope.unitId);
   const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.superAdminOnly || profile?.role === "super_admin",
+    (item) =>
+      (!item.superAdminOnly || profile?.role === "super_admin") &&
+      (!item.operatorOnly || profile?.role === "operator"),
   );
 
   return (

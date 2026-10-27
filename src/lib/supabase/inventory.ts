@@ -31,6 +31,7 @@ export type MovementBatch = {
   itemCount: number;
   items: MovementItem[];
   userName: string | null;
+  legacy?: boolean | undefined;
 };
 
 export type MovementItem = {
@@ -117,11 +118,31 @@ export async function loadInventorySnapshot(
   if (from) batchQuery = batchQuery.gte("occurred_at", from);
   if (to) batchQuery = batchQuery.lte("occurred_at", to);
 
-  const [productResult, balanceResult, lotResult, batchResult] =
-    await Promise.all([productQuery, balanceQuery, lotQuery, batchQuery]);
+  let legacyQuery = client
+    .from("legacy_stock_withdrawals")
+    .select(
+      "id, source_withdrawal_id, source_product_id, product_id, occurred_at, source_payload",
+    )
+    .eq("company_id", companyId)
+    .eq("unit_id", unitId)
+    .eq("source_app", "almox-hgrs")
+    .order("occurred_at", { ascending: false })
+    .limit(1000);
+  if (from) legacyQuery = legacyQuery.gte("occurred_at", from);
+  if (to) legacyQuery = legacyQuery.lte("occurred_at", to);
+
+  const [productResult, balanceResult, lotResult, batchResult, legacyResult] =
+    await Promise.all([
+      productQuery,
+      balanceQuery,
+      lotQuery,
+      batchQuery,
+      legacyQuery,
+    ]);
   for (const result of [productResult, balanceResult, lotResult, batchResult]) {
     if (result.error) throw result.error;
   }
+  if (legacyResult.error) throw legacyResult.error;
 
   const productsRaw = (productResult.data ?? []) as Raw[];
   const balancesRaw = (balanceResult.data ?? []) as Raw[];
@@ -272,7 +293,45 @@ export async function loadInventorySnapshot(
       itemCount: requestedItems,
       items: itemsByBatch.get(id) ?? [],
       userName: userNames.get(userId) ?? null,
+      legacy: false,
     };
   });
-  return { products, lots, movements };
+  const legacyMovements: MovementBatch[] = ((legacyResult.data ?? []) as Raw[])
+    .map((row): MovementBatch | null => {
+      const payload = record(row["source_payload"]);
+      const occurredAt = nullableText(row["occurred_at"]);
+      const sourceId = text(row["source_withdrawal_id"]);
+      if (!occurredAt) return null;
+      const sourceProductId = nullableText(row["source_product_id"]);
+      const productId = nullableText(row["product_id"]);
+      const item: MovementItem = {
+        id: text(row["id"]),
+        productId: productId ?? sourceProductId ?? "",
+        name: text(payload["productName"]) || "Produto sem descrição no backup",
+        sku: text(payload["barcode"]),
+        unit: text(payload["unit"]),
+        quantity: number(payload["quantity"]),
+        lotNumber: null,
+        expiresOn: null,
+        adjustmentDirection: null,
+      };
+      return {
+        id: `legacy:${sourceId}`,
+        unitId,
+        type: "exit" as const,
+        occurredAt,
+        service: nullableText(payload["period"]),
+        exitType: nullableText(payload["exitType"]),
+        supplierId: null,
+        sourceReference: sourceId,
+        note: nullableText(payload["operatorRole"]),
+        userId: text(payload["withdrawnBy"]),
+        itemCount: 1,
+        items: [item],
+        userName: nullableText(payload["operatorName"]),
+        legacy: true,
+      };
+    })
+    .filter((row): row is MovementBatch => row !== null);
+  return { products, lots, movements: [...legacyMovements, ...movements] };
 }

@@ -39,7 +39,11 @@ import {
   validateServiceSelection,
   type ServiceSelection,
 } from "@/lib/rules/service-suggestion";
-import { nowInOperationalTz, operationalDateTimeToIso } from "@/lib/datetime";
+import {
+  formatIsoDate,
+  nowInOperationalTz,
+  operationalDateTimeToIso,
+} from "@/lib/datetime";
 import {
   prefillFromQuery,
   type MovementItemDraft,
@@ -56,10 +60,12 @@ export function ExitDialog({
   open,
   onOpenChange,
   initialProduct,
+  simplified = false,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   initialProduct?: Product | undefined;
+  simplified?: boolean | undefined;
 }) {
   const catalog = useCatalog();
   const { unitId } = useOperationalScope();
@@ -216,71 +222,137 @@ export function ExitDialog({
           )}
         </DialogHeader>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Data da saída" htmlFor="x-date" required>
-            <Input
-              id="x-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </Field>
-          <Field label="Horário" htmlFor="x-time" required>
-            <Input
-              id="x-time"
-              type="time"
-              className="tabular"
-              value={time}
-              onChange={(e) => onTimeChange(e.target.value)}
-            />
-          </Field>
-          <Field label="Tipo de saída" required>
-            <Select
-              value={exitType}
-              onValueChange={(v) => setExitType(v as ExitTypeCode)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {EXIT_TYPES.map((t) => (
-                  <SelectItem key={t.code} value={t.code}>
-                    {operational.exitTypeLabels[t.code] ?? t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        {simplified && (
+          <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+            Saída em {date ? formatIsoDate(date) : "—"} às {time || "—"}{" "}
+            (horário de Salvador).
+          </p>
+        )}
+        <details
+          open={!simplified}
+          className={simplified ? "rounded-md border px-3 py-2" : "contents"}
+        >
+          {simplified && (
+            <summary className="cursor-pointer text-sm font-medium">
+              Alterar data ou horário
+            </summary>
+          )}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Data da saída" htmlFor="x-date" required>
+              <Input
+                id="x-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </Field>
+            <Field label="Horário" htmlFor="x-time" required>
+              <Input
+                id="x-time"
+                type="time"
+                className="tabular"
+                value={time}
+                onChange={(e) => onTimeChange(e.target.value)}
+              />
+            </Field>
+            {!simplified && (
+              <Field label="Tipo de saída" required>
+                <Select
+                  value={exitType}
+                  onValueChange={(v) => setExitType(v as ExitTypeCode)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXIT_TYPES.map((t) => (
+                      <SelectItem key={t.code} value={t.code}>
+                        {operational.exitTypeLabels[t.code] ?? t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </div>
+        </details>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-foreground/80">
-            Serviço de destino<span className="ml-0.5 text-destructive">*</span>
-          </span>
-          <ToggleGroup
-            type="single"
-            value={selection.value ?? ""}
-            onValueChange={(v) => v && pickService(v as ServiceCode)}
-            className="grid grid-cols-2 gap-2 sm:grid-cols-3"
-          >
-            {SERVICE_OPTIONS.map((s) => (
-              <ToggleGroupItem
-                key={s.code}
-                value={s.code}
-                className="h-9 rounded-md border text-sm data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        {simplified ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tipo de saída">
+              <ToggleGroup
+                type="single"
+                value={exitType}
+                onValueChange={(value) =>
+                  value && setExitType(value as ExitTypeCode)
+                }
+                className="grid grid-cols-2 gap-2"
               >
-                {operational.serviceLabels[s.code] ?? s.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <SuggestionHint
-            suggestion={suggestion}
-            manual={selection.manual}
-            alternatives={alternatives}
-            serviceLabels={operational.serviceLabels}
-            onPick={pickService}
-          />
-        </div>
+                {EXIT_TYPES.map((type) => (
+                  <ToggleGroupItem
+                    key={type.code}
+                    value={type.code}
+                    className="h-10 rounded-md border text-sm data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  >
+                    {operational.exitTypeLabels[type.code] ?? type.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </Field>
+            <Field label="Serviço de destino">
+              <Select
+                value={selection.value ?? ""}
+                onValueChange={(value) => pickService(value as ServiceCode)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o serviço" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SERVICE_OPTIONS.map((service) => (
+                    <SelectItem key={service.code} value={service.code}>
+                      {operational.serviceLabels[service.code] ?? service.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selection.manual && suggestion.kind === "single" && (
+                <span className="text-xs text-muted-foreground">
+                  Sugerido pelo horário
+                </span>
+              )}
+            </Field>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-foreground/80">
+              Serviço de destino
+              <span className="ml-0.5 text-destructive">*</span>
+            </span>
+            <ToggleGroup
+              type="single"
+              value={selection.value ?? ""}
+              onValueChange={(v) => v && pickService(v as ServiceCode)}
+              className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+            >
+              {SERVICE_OPTIONS.map((s) => (
+                <ToggleGroupItem
+                  key={s.code}
+                  value={s.code}
+                  className="h-9 rounded-md border text-sm data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  {operational.serviceLabels[s.code] ?? s.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <SuggestionHint
+              suggestion={suggestion}
+              manual={selection.manual}
+              alternatives={alternatives}
+              serviceLabels={operational.serviceLabels}
+              onPick={pickService}
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-foreground/80">

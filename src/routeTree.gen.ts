@@ -18,6 +18,7 @@ import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanejamentoRouteImport } from './routes/planejamento'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
+import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as UnidadesRouteImport } from './routes/unidades'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 
@@ -66,6 +67,11 @@ const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   path: '/redefinir-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SaidaRoute = SaidaRouteImport.update({
+  id: '/saida',
+  path: '/saida',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UnidadesRoute = UnidadesRouteImport.update({
   id: '/unidades',
   path: '/unidades',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/saida'
     | '/unidades'
     | '/usuarios'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/saida'
     | '/unidades'
     | '/usuarios'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/saida'
     | '/unidades'
     | '/usuarios'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   PerfilRoute: typeof PerfilRoute
   PlanejamentoRoute: typeof PlanejamentoRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  SaidaRoute: typeof SaidaRoute
   UnidadesRoute: typeof UnidadesRoute
   UsuariosRoute: typeof UsuariosRoute
 }
@@ -238,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/saida': {
+      id: '/saida'
+      path: '/saida'
+      fullPath: '/saida'
+      preLoaderRoute: typeof SaidaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/unidades': {
       id: '/unidades'
       path: '/unidades'
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerfilRoute: PerfilRoute,
   PlanejamentoRoute: PlanejamentoRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
+  SaidaRoute: SaidaRoute,
   UnidadesRoute: UnidadesRoute,
   UsuariosRoute: UsuariosRoute,
 }

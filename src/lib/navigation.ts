@@ -14,6 +14,7 @@ export type NavItem = {
   to:
     | "/"
     | "/movimentacoes"
+    | "/saida"
     | "/cadastro"
     | "/planejamento"
     | "/usuarios"
@@ -24,6 +25,7 @@ export type NavItem = {
   icon: LucideIcon;
   group: "operacao" | "administracao";
   superAdminOnly?: boolean;
+  operatorOnly?: boolean;
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -33,6 +35,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Movimentações",
     icon: ArrowLeftRight,
     group: "operacao",
+  },
+  {
+    to: "/saida",
+    label: "Registrar saÃ­da",
+    icon: ArrowLeftRight,
+    group: "operacao",
+    operatorOnly: true,
   },
   {
     to: "/cadastro",

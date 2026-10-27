@@ -14,5 +14,8 @@ dist/
 serviceAccountKey.json
 supabase/.temp/
 
+# Local generated SQL may include product and historical operator data
+/tmp/legacy-backup-*.sql
+
 # Local Netlify folder
 .netlify

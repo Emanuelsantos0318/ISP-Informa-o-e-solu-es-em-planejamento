@@ -19,10 +19,14 @@ export function MovementActions({
   size = "default",
   hideButtons = false,
   request,
+  exitOnly = false,
+  simplifiedExit = false,
 }: {
   size?: "default" | "lg";
   hideButtons?: boolean | undefined;
   request?: MovementRequest | null | undefined;
+  exitOnly?: boolean | undefined;
+  simplifiedExit?: boolean | undefined;
 }) {
   const [entryOpen, setEntryOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -45,13 +49,15 @@ export function MovementActions({
     <>
       {!hideButtons && (
         <>
-          <Button
-            variant="success"
-            size={size}
-            onClick={() => setEntryOpen(true)}
-          >
-            <ArrowDownToLine /> Nova entrada
-          </Button>
+          {!exitOnly && (
+            <Button
+              variant="success"
+              size={size}
+              onClick={() => setEntryOpen(true)}
+            >
+              <ArrowDownToLine /> Nova entrada
+            </Button>
+          )}
           <Button size={size} onClick={() => setExitOpen(true)}>
             <ArrowUpFromLine /> Nova saída
           </Button>
@@ -75,6 +81,7 @@ export function MovementActions({
         open={exitOpen}
         onOpenChange={setExitOpen}
         initialProduct={initialProduct}
+        simplified={simplifiedExit}
       />
       <StockCorrectionDialog
         open={correctionOpen}
