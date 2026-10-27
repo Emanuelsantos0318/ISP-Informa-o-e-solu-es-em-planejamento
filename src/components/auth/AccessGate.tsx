@@ -20,7 +20,16 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!ready || !client) {
+  if (!ready) {
+    return (
+      <Message
+        title="Verificando acesso"
+        text="Carregando sua sessão e perfil autorizado…"
+        loading
+      />
+    );
+  }
+  if (!client) {
     return (
       <Message
         title="Configuração pendente"
@@ -29,14 +38,6 @@ export function AccessGate({ children }: { children: ReactNode }) {
     );
   }
   if (isInviteAcceptance || isPasswordReset) return <>{children}</>;
-  if (!ready)
-    return (
-      <Message
-        title="Verificando acesso"
-        text="Carregando sua sessão e perfil autorizado…"
-        loading
-      />
-    );
   if (session && profile)
     return (
       <OperationalScopeProvider>
