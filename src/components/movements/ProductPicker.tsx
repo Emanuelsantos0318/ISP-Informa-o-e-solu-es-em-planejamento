@@ -22,11 +22,13 @@ export function ProductPicker({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[] | null>(null);
+  const [searched, setSearched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const run = () => {
     if (!query.trim()) return;
     const found = searchProducts(products, query);
+    setSearched(true);
     const first = found[0];
     if (
       found.length === 1 &&
@@ -42,19 +44,21 @@ export function ProductPicker({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div className="flex gap-2">
         <div className="relative flex-1">
           <ScanBarcode className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={inputRef}
             aria-label="Pesquisar produto"
-            placeholder="Código de barras, SKU ou nome do produto"
+            placeholder="Digite o nome, código de barras ou SKU"
             className="pl-8"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
-              setResults(null);
+              const value = e.target.value;
+              setQuery(value);
+              setSearched(false);
+              setResults(value.trim() ? searchProducts(products, value) : null);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -64,12 +68,21 @@ export function ProductPicker({
             }}
           />
         </div>
-        <Button type="button" variant="secondary" onClick={run}>
+        <Button
+          type="button"
+          className="bg-[#0d3d43] text-white hover:bg-[#14525a]"
+          onClick={run}
+        >
           <Search /> Buscar
         </Button>
       </div>
 
-      {results !== null && results.length === 0 && allowCreate && (
+      <p className="text-xs text-muted-foreground">
+        A busca atualiza enquanto você digita. Leia o código de barras ou
+        pesquise pelo nome.
+      </p>
+
+      {results !== null && results.length === 0 && allowCreate && searched && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
           <div className="flex items-center gap-2 text-sm">
             <PackageX className="size-4 text-muted-foreground" />
@@ -87,12 +100,12 @@ export function ProductPicker({
       )}
 
       {results !== null && results.length > 0 && (
-        <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
+        <ul className="max-h-64 divide-y overflow-y-auto rounded-xl border border-[#d7e5e5] bg-white">
           {results.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent"
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-[#f1f7f7]"
                 onClick={() => {
                   onSelect(p);
                   setQuery("");
@@ -110,6 +123,11 @@ export function ProductPicker({
                   <span className="ml-2 font-mono text-xs text-muted-foreground">
                     {p.sku}
                   </span>
+                  {p.barcode && (
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
+                      · {p.barcode}
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-muted-foreground tabular">
                   Saldo: {p.balance} {unitShort(p.unit)}

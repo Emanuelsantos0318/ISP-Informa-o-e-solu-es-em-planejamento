@@ -76,6 +76,7 @@ export function ProductFormDialog({
   prefill,
   contextual,
   product,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -83,6 +84,7 @@ export function ProductFormDialog({
   /** opened from inside a movement modal */
   contextual?: boolean | undefined;
   product?: CatalogProduct | undefined;
+  onCreated?: ((productId: string) => void) | undefined;
 }) {
   const [form, setForm] = useState<FormState>(empty);
   const [errors, setErrors] = useState<FieldErrors<FormState>>({});
@@ -107,7 +109,7 @@ export function ProductFormDialog({
       setForm({
         ...empty,
         name: product?.name ?? prefill?.name ?? "",
-        sku: product?.sku ?? prefill?.sku ?? "",
+        sku: product?.sku ?? prefill?.sku ?? prefill?.barcode ?? "",
         barcode: product?.barcode ?? prefill?.barcode ?? "",
         brand: product?.brand ?? "",
         categoryId: product?.categoryId ?? "",
@@ -156,6 +158,7 @@ export function ProductFormDialog({
       );
     }
     setSaving(true);
+    let createdProductId: string | null = null;
     try {
       const values = {
         category_id: parsed.data.categoryId,
@@ -193,6 +196,7 @@ export function ProductFormDialog({
         return setBackendError(
           "O produto não foi atualizado. Confira seu acesso e tente novamente.",
         );
+      if (!product) createdProductId = data.id;
     } catch {
       return setBackendError(
         "Falha de conexão. Confira a rede e tente novamente.",
@@ -209,6 +213,7 @@ export function ProductFormDialog({
         queryKey: ["categories", profile.company_id],
       }),
     ]);
+    if (createdProductId) onCreated?.(createdProductId);
     onOpenChange(false);
   };
 

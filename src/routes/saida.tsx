@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ProductPicker } from "@/components/movements/ProductPicker";
+import { ProductFormDialog } from "@/components/cadastro/ProductFormDialog";
 import { SelectedProductRow } from "@/components/movements/SelectedProductRow";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
@@ -43,7 +44,12 @@ import {
   operationalDateTimeToIso,
   OPERATIONAL_TZ,
 } from "@/lib/datetime";
-import { searchProducts, type Product } from "@/lib/types";
+import {
+  prefillFromQuery,
+  searchProducts,
+  type Product,
+  type ProductPrefill,
+} from "@/lib/types";
 import { unitShort } from "@/lib/config/units";
 
 export const Route = createFileRoute("/saida")({
@@ -104,6 +110,10 @@ function OperatorExitPage() {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [scanMatches, setScanMatches] = useState<Product[] | null>(null);
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [createProductOpen, setCreateProductOpen] = useState(false);
+  const [createProductPrefill, setCreateProductPrefill] =
+    useState<ProductPrefill>({});
+  const [pendingCreatedProductId, setPendingCreatedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState("registrar");
   const [destination, setDestination] = useState<ExitDestinationCode | "">("");
@@ -214,6 +224,21 @@ function OperatorExitPage() {
   useEffect(() => {
     if (!selectedProduct) scannerRef.current?.focus();
   }, [selectedProduct]);
+
+  useEffect(() => {
+    if (!pendingCreatedProductId) return;
+    const created = products.find(
+      (product) => product.id === pendingCreatedProductId,
+    );
+    if (!created) return;
+    setSelectedProduct(created);
+    setActiveTab("registrar");
+    setScanMatches(null);
+    setScanMessage(null);
+    setBarcode("");
+    setShowProductSearch(false);
+    setPendingCreatedProductId("");
+  }, [pendingCreatedProductId, products]);
 
   if (profile?.role !== "operator") {
     return (
@@ -330,6 +355,7 @@ function OperatorExitPage() {
         ? "Há mais de um produto com esse código. Selecione o correto."
         : "Código não encontrado no catálogo ativo desta unidade.",
     );
+    if (exact.length === 0) setFormError(null);
   };
 
   const serviceName = (code: string | null) => {
@@ -458,16 +484,28 @@ function OperatorExitPage() {
                   <Search />{" "}
                   {showProductSearch
                     ? "Fechar busca"
-                    : "Pesquisar produto pelo nome"}
+                    : "Buscar por nome ou código"}
                 </Button>
               </div>
               {scanMessage && (
                 <div
-                  className="mt-3 space-y-2"
+                  className={`mt-3 space-y-2 rounded-xl border p-3 ${scanMatches === null ? "border-amber-300 bg-amber-50" : "border-destructive/30 bg-destructive-soft"}`}
                   role="status"
                   aria-live="polite"
                 >
-                  <p className="text-sm text-destructive">{scanMessage}</p>
+                  <p
+                    className={`text-sm ${scanMatches === null ? "text-amber-950" : "text-destructive"}`}
+                  >
+                    {scanMatches === null
+                      ? "Este código ainda não está no cadastro."
+                      : scanMessage}
+                  </p>
+                  {scanMatches === null && (
+                    <p className="text-xs text-amber-900/80">
+                      Cadastre o produto uma vez; depois, a leitura do código o
+                      localizará automaticamente.
+                    </p>
+                  )}
                   {scanMatches?.map((product) => (
                     <button
                       key={product.id}
@@ -481,6 +519,19 @@ function OperatorExitPage() {
                       </span>
                     </button>
                   ))}
+                  {scanMatches === null && barcode.trim() && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
+                      onClick={() => {
+                        setCreateProductPrefill(prefillFromQuery(barcode));
+                        setCreateProductOpen(true);
+                      }}
+                    >
+                      Cadastrar produto com este código
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -595,12 +646,28 @@ function OperatorExitPage() {
               </div>
 
               {showProductSearch && (
-                <div className="mt-5 rounded-xl border border-[#d7e5e5] bg-[#f8fbfb] p-4">
+                <div className="mt-5 rounded-2xl border border-[#cfe0e0] bg-[#f8fbfb] p-4 md:p-5">
+                  <div className="mb-4 flex items-start gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#dff1ef] text-[#0d6665]">
+                      <Search className="size-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold">
+                        Buscar produto pelo nome
+                      </h3>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        Digite parte do nome, o código de barras ou o SKU. Se
+                        ainda não existir, você poderá cadastrá-lo aqui.
+                      </p>
+                    </div>
+                  </div>
                   <ProductPicker
                     products={products}
                     onSelect={selectProduct}
-                    onRequestCreate={() => undefined}
-                    allowCreate={false}
+                    onRequestCreate={(query) => {
+                      setCreateProductPrefill(prefillFromQuery(query));
+                      setCreateProductOpen(true);
+                    }}
                   />
                 </div>
               )}
@@ -806,6 +873,12 @@ function OperatorExitPage() {
           </TabsContent>
         </div>
       </Tabs>
+      <ProductFormDialog
+        open={createProductOpen}
+        onOpenChange={setCreateProductOpen}
+        prefill={createProductPrefill}
+        onCreated={setPendingCreatedProductId}
+      />
     </div>
   );
 }
