@@ -86,6 +86,8 @@ export function ExitDialog({
   const [items, setItems] = useState<MovementItemDraft[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
   const [notes, setNotes] = useState("");
+  const [destination, setDestination] = useState("");
+  const [recipient, setRecipient] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -108,6 +110,8 @@ export function ExitDialog({
     setItems([]);
     setSelected(initialProduct ?? null);
     setNotes("");
+    setDestination("");
+    setRecipient("");
     setErrors([]);
     setIdempotencyKey(null);
     setSubmitError(null);
@@ -184,6 +188,12 @@ export function ExitDialog({
         items: items.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
+          unitsReleased: item.releasedUnits,
+          unitsPerPackage: item.releasedUnits
+            ? item.product.unitsPerPackage
+            : null,
+          destination: destination.trim() || null,
+          recipient: recipient.trim() || null,
           lotNumber: item.lot,
           expiresOn: item.expiry,
         })),
@@ -396,6 +406,55 @@ export function ExitDialog({
             onRemove={(k) => setItems((cur) => cur.filter((i) => i.key !== k))}
           />
         </div>
+
+        <section className="grid gap-3 rounded-md border p-3">
+          <div>
+            <p className="text-sm font-medium">
+              Retirado por / destino (opcional)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Identifique quem está retirando e para onde o material será
+              enviado.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {["Servidor", "Paciente", "Patiscaria", "Lactário", "Geral"].map(
+              (value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={destination === value ? "default" : "outline"}
+                  onClick={() =>
+                    setDestination(destination === value ? "" : value)
+                  }
+                >
+                  {value}
+                </Button>
+              ),
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Destino" htmlFor="x-destination">
+              <Input
+                id="x-destination"
+                maxLength={120}
+                value={destination}
+                onChange={(event) => setDestination(event.target.value)}
+                placeholder="Ex.: Paciente, Lactário, setor..."
+              />
+            </Field>
+            <Field label="Quem está retirando" htmlFor="x-recipient">
+              <Input
+                id="x-recipient"
+                maxLength={120}
+                value={recipient}
+                onChange={(event) => setRecipient(event.target.value)}
+                placeholder="Nome do solicitante"
+              />
+            </Field>
+          </div>
+        </section>
 
         <Field label="Observação" htmlFor="x-notes">
           <Textarea

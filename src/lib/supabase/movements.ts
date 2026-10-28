@@ -4,6 +4,10 @@ import type { ExitTypeCode, ServiceCode } from "@/lib/config/services";
 export type MovementBatchItem = {
   productId: string;
   quantity: number;
+  unitsReleased?: number | undefined;
+  unitsPerPackage?: number | null | undefined;
+  destination?: string | null | undefined;
+  recipient?: string | null | undefined;
   lotNumber?: string | undefined;
   expiresOn?: string | undefined;
   adjustmentDirection?: "increase" | "decrease" | null | undefined;
@@ -60,6 +64,10 @@ export async function recordMovementBatch(
     p_items: input.items.map((item) => ({
       product_id: item.productId,
       quantity: item.quantity,
+      units_released: item.unitsReleased ?? null,
+      units_per_package: item.unitsPerPackage ?? null,
+      destination: item.destination ?? null,
+      recipient: item.recipient ?? null,
       lot_number: item.lotNumber ?? null,
       expires_on: item.expiresOn ?? null,
       adjustment_direction: item.adjustmentDirection ?? null,

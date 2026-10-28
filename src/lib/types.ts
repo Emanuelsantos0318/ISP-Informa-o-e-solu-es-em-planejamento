@@ -7,6 +7,7 @@ export type Product = {
   barcode: string | null;
   brand?: string | null | undefined;
   unit: UnitCode;
+  unitsPerPackage: number | null;
   balance: number;
   lotControl: boolean;
   expiryControl: boolean;
@@ -16,6 +17,7 @@ export type MovementItemDraft = {
   key: string;
   product: Product;
   quantity: number;
+  releasedUnits?: number | undefined;
   lot?: string | undefined;
   expiry?: string | undefined;
 };

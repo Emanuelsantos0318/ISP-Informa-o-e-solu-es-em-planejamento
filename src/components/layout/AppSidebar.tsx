@@ -30,15 +30,17 @@ export function AppSidebar() {
   const activeUnit = scope.units.find((unit) => unit.id === scope.unitId);
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
+      (item.to !== "/" || profile?.role !== "operator") &&
       (!item.superAdminOnly || profile?.role === "super_admin") &&
       (!item.operatorOnly || profile?.role === "operator"),
   );
+  const homePath = profile?.role === "operator" ? "/saida" : "/";
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-16 justify-center border-b border-sidebar-border">
         <Link
-          to="/"
+          to={homePath}
           className="flex items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           onClick={() => isMobile && setOpenMobile(false)}
         >

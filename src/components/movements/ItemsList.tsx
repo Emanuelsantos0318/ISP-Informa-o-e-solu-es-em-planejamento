@@ -45,7 +45,16 @@ export function ItemsList({
                 </p>
               </td>
               <td className="px-3 py-2 text-right tabular">
-                {i.quantity} {unitShort(i.product.unit)}
+                {i.releasedUnits != null ? (
+                  <span>
+                    {i.releasedUnits} unidades ({i.quantity}{" "}
+                    {unitShort(i.product.unit)})
+                  </span>
+                ) : (
+                  <span>
+                    {i.quantity} {unitShort(i.product.unit)}
+                  </span>
+                )}
               </td>
               {showLot && (
                 <td className="px-3 py-2 text-xs text-muted-foreground">

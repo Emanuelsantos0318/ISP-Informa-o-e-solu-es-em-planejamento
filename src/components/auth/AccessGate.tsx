@@ -1,6 +1,6 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, LoaderCircle, LogIn, ShieldCheck } from "lucide-react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,9 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export function AccessGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const isInviteAcceptance =
     router.state.location.pathname === "/aceitar-convite";
   const isPasswordReset = router.state.location.pathname === "/redefinir-senha";
@@ -19,6 +22,11 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session && profile?.role === "operator" && pathname === "/")
+      void router.navigate({ to: "/saida", replace: true });
+  }, [pathname, profile?.role, router, session]);
 
   if (!ready) {
     return (
@@ -38,6 +46,14 @@ export function AccessGate({ children }: { children: ReactNode }) {
     );
   }
   if (isInviteAcceptance || isPasswordReset) return <>{children}</>;
+  if (session && profile?.role === "operator" && pathname === "/")
+    return (
+      <Message
+        title="Abrindo área de saída"
+        text="Carregando a tela de registro de saídas."
+        loading
+      />
+    );
   if (session && profile)
     return (
       <OperationalScopeProvider>

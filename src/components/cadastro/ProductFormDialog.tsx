@@ -42,6 +42,7 @@ type FormState = {
   categoryId: string;
   description: string;
   unit: string;
+  unitsPerPackage: string;
   minStock: string;
   maxStock: string;
   unitCost: string;
@@ -59,6 +60,7 @@ const empty: FormState = {
   categoryId: "",
   description: "",
   unit: "",
+  unitsPerPackage: "",
   minStock: "0",
   maxStock: "",
   unitCost: "",
@@ -110,6 +112,10 @@ export function ProductFormDialog({
         brand: product?.brand ?? "",
         categoryId: product?.categoryId ?? "",
         unit: product?.unit ?? "",
+        unitsPerPackage:
+          product?.unitsPerPackage == null
+            ? ""
+            : String(product.unitsPerPackage),
         minStock: product ? String(product.minimumStock) : empty.minStock,
         maxStock:
           product?.desiredStock === null || product?.desiredStock === undefined
@@ -158,6 +164,13 @@ export function ProductFormDialog({
         barcode: parsed.data.barcode || null,
         brand: parsed.data.brand || null,
         unit_of_measure: parsed.data.unit,
+        units_per_package:
+          parsed.data.unit === "pct" ||
+          parsed.data.unit === "cx" ||
+          parsed.data.unit === "ct" ||
+          parsed.data.unit === "mi"
+            ? parsed.data.unitsPerPackage
+            : null,
         minimum_stock: parsed.data.minStock,
         desired_stock: parsed.data.maxStock,
         status: parsed.data.active ? "active" : "inactive",
@@ -300,7 +313,11 @@ export function ProductFormDialog({
           >
             <Select
               value={form.unit}
-              onValueChange={(v) => set("unit", v)}
+              onValueChange={(v) => {
+                set("unit", v);
+                if (!["pct", "cx", "ct", "mi"].includes(v))
+                  set("unitsPerPackage", "");
+              }}
               disabled={Boolean(product?.hasStock)}
             >
               <SelectTrigger>
@@ -315,6 +332,25 @@ export function ProductFormDialog({
               </SelectContent>
             </Select>
           </Field>
+          {["pct", "cx", "ct", "mi"].includes(form.unit) && (
+            <Field
+              label="Unidades por pacote"
+              htmlFor="p-units-per-package"
+              error={errors.unitsPerPackage}
+              hint="Cadastre somente quando souber o conteúdo exato do pacote."
+            >
+              <Input
+                id="p-units-per-package"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                className="tabular"
+                value={form.unitsPerPackage}
+                onChange={(e) => set("unitsPerPackage", e.target.value)}
+              />
+            </Field>
+          )}
           <Field
             label="Estoque mínimo"
             htmlFor="p-min"

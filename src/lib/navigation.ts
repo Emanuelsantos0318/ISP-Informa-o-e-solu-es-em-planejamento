@@ -38,7 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/saida",
-    label: "Registrar saÃ­da",
+    label: "Registrar saída",
     icon: ArrowLeftRight,
     group: "operacao",
     operatorOnly: true,

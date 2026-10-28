@@ -44,6 +44,10 @@ export type MovementItem = {
   lotNumber: string | null;
   expiresOn: string | null;
   adjustmentDirection: "increase" | "decrease" | null;
+  unitsReleased: number | null;
+  unitsPerPackage: number | null;
+  destination: string | null;
+  recipient: string | null;
 };
 
 export type StockLot = {
@@ -73,6 +77,12 @@ function nullableText(value: unknown): string | null {
 function number(value: unknown): number {
   const result = Number(value ?? 0);
   return Number.isFinite(result) ? result : 0;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const result = Number(value);
+  return Number.isFinite(result) ? result : null;
 }
 
 function record(value: unknown): Raw {
@@ -243,6 +253,13 @@ export async function loadInventorySnapshot(
     if (!product) continue;
     const lot = lotById.get(text(movement["product_lot_id"]));
     const batchId = text(link["batch_id"]);
+    const batch = batchesRaw.find((row) => text(row["id"]) === batchId);
+    const payload = record(batch?.["request_payload"]);
+    const requestedItems = Array.isArray(payload["items"])
+      ? payload["items"]
+      : [];
+    const itemIndex = Math.max(0, number(link["item_index"]) - 1);
+    const requestItem = record(requestedItems[itemIndex]);
     const batchItems = itemsByBatch.get(batchId) ?? [];
     batchItems.push({
       id: text(movement["id"]),
@@ -258,6 +275,10 @@ export async function loadInventorySnapshot(
         movement["adjustment_direction"] === "decrease"
           ? movement["adjustment_direction"]
           : null,
+      unitsReleased: nullableNumber(requestItem["units_released"]),
+      unitsPerPackage: nullableNumber(requestItem["units_per_package"]),
+      destination: nullableText(requestItem["destination"]),
+      recipient: nullableText(requestItem["recipient"]),
     });
     itemsByBatch.set(batchId, batchItems);
   }
@@ -314,6 +335,10 @@ export async function loadInventorySnapshot(
         lotNumber: null,
         expiresOn: null,
         adjustmentDirection: null,
+        unitsReleased: null,
+        unitsPerPackage: null,
+        destination: null,
+        recipient: null,
       };
       return {
         id: `legacy:${sourceId}`,

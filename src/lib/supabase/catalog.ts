@@ -73,7 +73,7 @@ export async function listProducts(
   let query = client
     .from("products")
     .select(
-      "id, company_id, category_id, sku, name, barcode, brand, unit_of_measure, minimum_stock, desired_stock, status, categories(name), stock_balances(quantity, unit_id)",
+      "id, company_id, category_id, sku, name, barcode, brand, unit_of_measure, units_per_package, minimum_stock, desired_stock, status, categories(name), stock_balances(quantity, unit_id)",
     )
     .eq("company_id", companyId);
   if (!includeInactive) query = query.eq("status", "active");
@@ -95,6 +95,10 @@ export async function listProducts(
       barcode: typeof row["barcode"] === "string" ? row["barcode"] : null,
       brand: typeof row["brand"] === "string" ? row["brand"] : null,
       unit: supportedUnit,
+      unitsPerPackage:
+        row["units_per_package"] == null
+          ? null
+          : Number(row["units_per_package"]),
       balance: balances
         .filter((balance) => balance.unit_id === unitId)
         .reduce((total, balance) => total + Number(balance.quantity), 0),

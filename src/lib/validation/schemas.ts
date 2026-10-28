@@ -36,6 +36,9 @@ export const productSchema = z
     unit: z.enum(unitCodes, {
       message: "Selecione a unidade de medida.",
     }),
+    unitsPerPackage: z
+      .union([z.literal(""), z.coerce.number().int().positive()])
+      .transform((value) => (value === "" ? null : value)),
     minStock: z.coerce
       .number()
       .min(0, "O estoque mínimo não pode ser negativo."),
