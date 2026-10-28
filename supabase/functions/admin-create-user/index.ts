@@ -52,22 +52,29 @@ Deno.serve(async (request) => {
   if (authError || !authUser.user)
     return respond({ error: "Sessão inválida ou expirada." }, 401);
 
-  const { data: callerProfile, error: profileError } = await caller
+  const { data: callerProfile, error: profileError } = await admin
     .from("profiles")
     .select("company_id, role, status")
     .eq("user_id", authUser.user.id)
     .maybeSingle();
-  if (
-    profileError ||
-    !callerProfile ||
-    callerProfile.status !== "active" ||
-    !["admin", "super_admin"].includes(callerProfile.role)
-  ) {
+  if (profileError) {
+    console.error("admin-create-user profile lookup failed", profileError);
+    return respond(
+      { error: "Não foi possível validar seu perfil. Tente novamente." },
+      500,
+    );
+  }
+  if (!callerProfile || callerProfile.status !== "active") {
+    return respond(
+      { error: "Sua conta não possui um perfil ativo no ISP." },
+      403,
+    );
+  }
+  if (!["admin", "super_admin"].includes(callerProfile.role))
     return respond(
       { error: "Somente um administrador ativo pode criar contas." },
       403,
     );
-  }
 
   let input: {
     username?: unknown;

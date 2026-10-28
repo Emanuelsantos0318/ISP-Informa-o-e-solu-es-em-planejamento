@@ -51,22 +51,29 @@ Deno.serve(async (request) => {
   if (userError || !userResult.user)
     return json({ error: "Sessão inválida ou expirada." }, 401);
 
-  const { data: callerProfile, error: profileError } = await caller
+  const { data: callerProfile, error: profileError } = await admin
     .from("profiles")
     .select("company_id, role, status")
     .eq("user_id", userResult.user.id)
     .maybeSingle();
-  if (
-    profileError ||
-    !callerProfile ||
-    callerProfile.status !== "active" ||
-    !["admin", "super_admin"].includes(callerProfile.role)
-  ) {
+  if (profileError) {
+    console.error("admin-invite-user profile lookup failed", profileError);
+    return json(
+      { error: "Não foi possível validar seu perfil. Tente novamente." },
+      500,
+    );
+  }
+  if (!callerProfile || callerProfile.status !== "active") {
+    return json(
+      { error: "Sua conta não possui um perfil ativo no ISP." },
+      403,
+    );
+  }
+  if (!["admin", "super_admin"].includes(callerProfile.role))
     return json(
       { error: "Somente um administrador ativo pode convidar usuários." },
       403,
     );
-  }
 
   let input: {
     email?: unknown;
