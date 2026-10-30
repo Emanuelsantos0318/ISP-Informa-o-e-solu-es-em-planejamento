@@ -33,6 +33,7 @@ export function classifyStock(
   input: { balance: number; min: number; max?: number | null },
   settings: StockSettings = DEFAULT_STOCK_SETTINGS,
 ): StockStatus {
+  // A ordem importa: saldo zero e crítico têm prioridade sobre as faixas seguintes.
   const { balance, min, max } = input;
   if (balance <= 0) return "sem_saldo";
   if (min > 0 && balance <= min * settings.criticalRatio) return "critico";
@@ -51,6 +52,7 @@ export function suggestReorder(input: {
   max?: number | null;
   target?: number | null;
 }): number | null {
+  // Usa a meta explícita; na ausência dela, usa o estoque máximo como referência.
   const target = input.target ?? input.max ?? null;
   if (target == null) return null;
   return Math.max(0, target - input.balance);
@@ -83,6 +85,7 @@ export function classifyExpiry(
   today: string,
   settings: StockSettings = DEFAULT_STOCK_SETTINGS,
 ): ExpiryStatus {
+  // Datas são comparadas como dias de calendário UTC para evitar variação de fuso local.
   const diffDays = Math.round(
     (Date.parse(`${expiryDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
       86_400_000,

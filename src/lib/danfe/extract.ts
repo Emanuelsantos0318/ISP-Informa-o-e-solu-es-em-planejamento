@@ -23,6 +23,9 @@ export type DanfeExtraction = {
   text: string;
   pageCount: number;
   usedOcr: boolean;
+  ocrProvider: "text" | "tesseract" | "google-vision";
+  visionAttempted: boolean;
+  visionWarning: string | null;
   accessKey: string;
   invoiceNumber: string;
   series: string;
@@ -59,13 +62,92 @@ const emptyFields = {
   invoiceTotal: "",
 };
 
+type OcrWordPosition = {
+  text: string;
+  bbox: { x0: number; x1: number; y0: number; y1: number };
+};
+
+export type DanfeVisionPage = {
+  text: string;
+  width: number;
+  height: number;
+  words: OcrWordPosition[];
+};
+
+export type DanfeVisionRecognizer = (
+  imageBase64: string,
+  signal: AbortSignal,
+) => Promise<DanfeVisionPage>;
+
+function reconstructPositionedWords(
+  words: OcrWordPosition[],
+  imageHeight: number,
+): string {
+  const positioned = words
+    .filter((word) => word.text.trim())
+    .map((word) => ({
+      text: word.text.trim(),
+      x: word.bbox.x0,
+      y: (word.bbox.y0 + word.bbox.y1) / 2,
+    }))
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const tolerance = Math.max(5, Math.min(16, imageHeight * 0.004));
+  const rows: { y: number; words: typeof positioned }[] = [];
+  for (const word of positioned) {
+    const row = rows.at(-1);
+    if (row && Math.abs(row.y - word.y) <= tolerance) {
+      row.words.push(word);
+      row.y =
+        row.words.reduce((sum, part) => sum + part.y, 0) / row.words.length;
+    } else {
+      rows.push({ y: word.y, words: [word] });
+    }
+  }
+
+  return rows
+    .map((row) =>
+      row.words
+        .sort((a, b) => a.x - b.x)
+        .map((word) => word.text)
+        .join(" "),
+    )
+    .join("\n");
+}
+
+/** Junta palavras pela posição vertical quando OCR lê cada coluna como bloco separado. */
+function reconstructOcrRows(
+  data: {
+    blocks: Array<{
+      paragraphs: Array<{ lines: Array<{ words: OcrWordPosition[] }> }>;
+    }> | null;
+  },
+  imageHeight: number,
+): string {
+  const words = (data.blocks ?? [])
+    .flatMap((block) =>
+      block.paragraphs.flatMap((paragraph) =>
+        paragraph.lines.flatMap((line) => line.words),
+      ),
+    )
+    .filter((word) => word.text.trim())
+    .map((word) => ({
+      text: word.text,
+      bbox: word.bbox,
+    }));
+  return reconstructPositionedWords(words, imageHeight);
+}
+
 export function parseDanfeText(
   text: string,
   options: {
     usedOcr?: boolean | undefined;
     itemText?: string | undefined;
   } = {},
-): Omit<DanfeExtraction, "pageCount" | "usedOcr"> {
+): Omit<
+  DanfeExtraction,
+  "pageCount" | "usedOcr" | "ocrProvider" | "visionAttempted" | "visionWarning"
+> {
   const searchable = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const keyCandidate = searchable.match(
     /CHAVE\s+DE\s+ACESSO[^\d]{0,20}((?:\d[\s.]*){44})/i,
@@ -166,7 +248,7 @@ export function parseDanfeText(
         .replace(/\s+/g, " ")
         .trim();
       const ocrRow = normalizedLine.match(
-        /^(?:(\d{1,8})\s+)?(.+?)\s+(\d{8})\s+\d{2,4}\s+([12567]\d{3})\s+([A-Z]{1,5})\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)(?=$|\s|[^\d.,A-Z])/i,
+        /^(?:(\d{1,8}(?:[.,]\d{1,3})?)\s+)?(.+?)\s+(\d{8})\s+\d{2,4}\s+([1-7]\d{3})\s+([A-Z]{1,5})\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)(?=$|\s|[^\d.,A-Z])/i,
       );
       if (ocrRow) {
         const item: DanfeItem = {
@@ -247,6 +329,7 @@ export async function extractDanfePdf(
   file: File,
   onProgress?: (message: string) => void,
   signal?: AbortSignal,
+  recognizeWithVision?: DanfeVisionRecognizer | undefined,
 ): Promise<DanfeExtraction> {
   if (file.size <= 0 || file.size > DANFE_MAX_BYTES) {
     throw new Error("O PDF deve ter até 10 MB.");
@@ -322,9 +405,12 @@ export async function extractDanfePdf(
     let text = pages.join("\n");
     const usedOcr = pages.some(
       (page) =>
-        page.trim().length < 40 || parseDanfeText(page).items.length === 0,
+        page.trim().length < 40 || parseDanfeText(page).items.length < 4,
     );
     let itemText = "";
+    let usedVision = false;
+    let visionAttempted = false;
+    let visionWarning: string | null = null;
     if (usedOcr) {
       onProgress?.(
         "O PDF parece digitalizado. Iniciando OCR local em português…",
@@ -359,10 +445,11 @@ export async function extractDanfePdf(
           const searchableText = pages[pageNo - 1] ?? "";
           const searchableItems = parseDanfeText(searchableText).items;
           // A hidden text layer can contain only the DANFE header (or broken
-          // OCR text). Keep it only when it gives us at least one product row.
+          // OCR text). Keep it only when it gives us a useful set of product
+          // rows; a couple of accidental matches must not suppress image OCR.
           if (
             searchableText.trim().length >= 40 &&
-            searchableItems.length > 0
+            searchableItems.length >= 4
           ) {
             recognized.push(searchableText);
             itemText += `${searchableText}\n`;
@@ -393,27 +480,35 @@ export async function extractDanfePdf(
             user_defined_dpi: "300",
             tessedit_pageseg_mode: PSM.AUTO,
           });
-          const fullPage = await worker.recognize(canvas);
-          let pageText = fullPage.data.text;
+          const fullPage = await worker.recognize(canvas, {}, { blocks: true });
+          const fullPositionedText = reconstructOcrRows(
+            fullPage.data,
+            canvas.height,
+          );
+          let pageText = `${fullPage.data.text}\n${fullPositionedText}`;
           const fullPageItems = parseDanfeText(pageText, {
             usedOcr: true,
           }).items;
           let bestItemText = pageText;
           let bestItemCount = fullPageItems.length;
+          let bestConfidence = fullPage.data.confidence;
           let bestScore = fullPageItems.length * 100 + fullPage.data.confidence;
 
           // DANFE item rows are a small, dense table. Run a second pass over
-          // the lower page at the same print resolution; comparing row count
+          // the broad content area at print resolution; comparing row count
           // and Tesseract confidence avoids trusting a weak whole-page pass.
+          // DANFEs vary in where the item table starts. This broad crop
+          // includes the first product rows on continuation pages.
           const tableCanvas = document.createElement("canvas");
+          const tableStartY = Math.floor(canvas.height * 0.12);
           tableCanvas.width = canvas.width;
-          tableCanvas.height = Math.ceil(canvas.height * 0.68);
+          tableCanvas.height = Math.ceil(canvas.height * 0.8);
           const tableContext = tableCanvas.getContext("2d");
           if (tableContext) {
             tableContext.drawImage(
               canvas,
               0,
-              Math.floor(canvas.height * 0.32),
+              tableStartY,
               canvas.width,
               tableCanvas.height,
               0,
@@ -426,21 +521,75 @@ export async function extractDanfePdf(
               user_defined_dpi: "300",
               tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
             });
-            const tableResult = await worker.recognize(tableCanvas);
-            const tableItems = parseDanfeText(tableResult.data.text, {
+            const tableResult = await worker.recognize(
+              tableCanvas,
+              {},
+              { blocks: true },
+            );
+            const tablePositionedText = reconstructOcrRows(
+              tableResult.data,
+              tableCanvas.height,
+            );
+            const tableText = `${tableResult.data.text}\n${tablePositionedText}`;
+            const tableItems = parseDanfeText(tableText, {
               usedOcr: true,
             }).items;
             const tableScore =
               tableItems.length * 100 + tableResult.data.confidence;
             if (tableScore > bestScore) {
-              bestItemText = tableResult.data.text;
+              bestItemText = tableText;
               bestItemCount = tableItems.length;
+              bestConfidence = tableResult.data.confidence;
               bestScore = tableScore;
-              pageText = `${pageText}\n${tableResult.data.text}`;
+              pageText = `${pageText}\n${tableText}`;
             }
           }
           tableCanvas.width = 0;
           tableCanvas.height = 0;
+
+          // Usa OCR externo apenas quando o OCR local não estruturou a tabela.
+          if (
+            recognizeWithVision &&
+            (bestItemCount < 4 || bestConfidence < 40)
+          ) {
+            visionAttempted = true;
+            onProgress?.(
+              `A leitura local reconheceu poucos itens. Enviando a página ${pageNo} ao Google Cloud Vision…`,
+            );
+            try {
+              if (signal?.aborted)
+                throw new DOMException("Importação cancelada.", "AbortError");
+              const imageData = canvas.toDataURL("image/jpeg", 0.82);
+              const imageBase64 = imageData.slice(imageData.indexOf(",") + 1);
+              const visionPage = await recognizeWithVision(
+                imageBase64,
+                signal ?? new AbortController().signal,
+              );
+              const visionText = `${visionPage.text}\n${reconstructPositionedWords(visionPage.words, visionPage.height)}`;
+              const visionItemCount = parseDanfeText(visionText, {
+                usedOcr: true,
+              }).items.length;
+              if (
+                visionItemCount > bestItemCount ||
+                (bestItemCount < 4 && visionText.trim().length > 80)
+              ) {
+                bestItemText = visionText;
+                bestItemCount = visionItemCount;
+                pageText = `${pageText}\n${visionPage.text}`;
+                usedVision = true;
+              }
+            } catch (error) {
+              if (signal?.aborted)
+                throw new DOMException("Importação cancelada.", "AbortError");
+              onProgress?.(
+                `O OCR externo não ficou disponível nesta página; mantive a leitura local. ${error instanceof Error ? error.message : ""}`,
+              );
+              visionWarning =
+                error instanceof Error
+                  ? error.message
+                  : "O OCR externo não ficou disponível; confira a leitura local manualmente.";
+            }
+          }
           itemText += `${bestItemText}\n`;
           onProgress?.(
             `OCR da página ${pageNo}: ${bestItemCount} item(ns) estruturados.`,
@@ -463,6 +612,13 @@ export async function extractDanfePdf(
       }),
       pageCount: pdfDocument.numPages,
       usedOcr,
+      ocrProvider: usedVision
+        ? "google-vision"
+        : usedOcr
+          ? "tesseract"
+          : "text",
+      visionAttempted,
+      visionWarning,
     };
   } finally {
     signal?.removeEventListener("abort", abortProcessing);

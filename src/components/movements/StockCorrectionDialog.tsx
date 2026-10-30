@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useCatalog } from "@/lib/supabase/useCatalog";
 import { useMovementBatch } from "@/lib/supabase/useMovementBatch";
+import { createUuid } from "@/lib/uuid";
 import { nowInOperationalTz, operationalDateTimeToIso } from "@/lib/datetime";
 import type { MovementItemDraft, Product } from "@/lib/types";
 import { ProductPicker } from "./ProductPicker";
@@ -43,6 +44,7 @@ export function StockCorrectionDialog({
   const catalog = useCatalog();
   const movement = useMovementBatch();
   const canManage =
+    profile?.role === "operator" ||
     profile?.role === "admin" ||
     profile?.role === "stock_manager" ||
     profile?.role === "super_admin";
@@ -73,7 +75,7 @@ export function StockCorrectionDialog({
   const confirm = async () => {
     if (!canManage) {
       setError(
-        "Somente administradores e gestores de estoque podem fazer ajustes ou registrar perdas.",
+        "Seu perfil não tem permissão para esta operação.",
       );
       return;
     }
@@ -88,7 +90,7 @@ export function StockCorrectionDialog({
         unitId,
         movementType: type,
         operationalAt,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: createUuid(),
         note,
         items: items.map((item) => ({
           productId: item.product.id,
@@ -124,8 +126,8 @@ export function StockCorrectionDialog({
             <Scale className="size-5" /> Ajuste de estoque ou perda
           </DialogTitle>
           <DialogDescription>
-            Operações auditadas, disponíveis apenas para administrador e gestor
-            de estoque. Saídas por lote usam primeiro a validade mais próxima.
+            Ajustes ficam registrados no histórico. Perdas e descartes são
+            restritos à administração. Saídas por lote seguem a validade mais próxima.
           </DialogDescription>
         </DialogHeader>
         {!canManage && (
@@ -144,7 +146,9 @@ export function StockCorrectionDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="adjustment">Ajuste de inventário</SelectItem>
-                <SelectItem value="loss">Perda / descarte</SelectItem>
+                {profile?.role !== "operator" && (
+                  <SelectItem value="loss">Perda / descarte</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </Field>
@@ -204,7 +208,7 @@ export function StockCorrectionDialog({
               onAdd={(item) => {
                 setItems((current) => [
                   ...current,
-                  { ...item, key: crypto.randomUUID() },
+                  { ...item, key: createUuid() },
                 ]);
                 setSelected(null);
               }}

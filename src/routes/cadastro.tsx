@@ -37,8 +37,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BackendNotice } from "@/components/common/BackendNotice";
 import { useCatalog } from "@/lib/supabase/useCatalog";
+import { createUuid } from "@/lib/uuid";
 import type { CatalogProduct } from "@/lib/supabase/catalog";
 import { unitShort } from "@/lib/config/units";
+import { formatCnpj } from "@/lib/validation/cnpj";
+import type { CategoryRecord, SupplierRecord } from "@/lib/supabase/catalog";
+import { useAuth } from "@/lib/supabase/AuthProvider";
 
 export const Route = createFileRoute("/cadastro")({
   head: () => ({
@@ -68,8 +72,19 @@ function CadastroPage() {
   const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(
     null,
   );
+  const [editingCategory, setEditingCategory] =
+    useState<CategoryRecord | null>(null);
+  const [editingSupplier, setEditingSupplier] =
+    useState<SupplierRecord | null>(null);
   const [movementRequest, setMovementRequest] =
     useState<MovementRequest | null>(null);
+  const { profile } = useAuth();
+  const canManageCatalog =
+    profile !== null &&
+    ["super_admin", "admin", "stock_manager"].includes(profile.role);
+  const canEditProducts = canManageCatalog || profile?.role === "operator";
+  const canCreateSuppliers = canManageCatalog || profile?.role === "operator";
+  const canMoveStock = canEditProducts;
   const catalog = useCatalog({ includeInactiveProducts: true });
   const productRows = (catalog.products.data ?? []).map((product) => ({
     id: product.id,
@@ -87,15 +102,15 @@ function CadastroPage() {
     ],
     actions: (
       <div className="flex items-center justify-end gap-2">
-        <Button
+        {canEditProducts && (product.status === "active" || canManageCatalog) && <Button
           type="button"
           size="sm"
           variant="outline"
           onClick={() => setEditingProduct(product)}
         >
           <Pencil /> Editar
-        </Button>
-        {product.status === "active" && (
+        </Button>}
+        {canMoveStock && product.status === "active" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" size="sm" variant="outline">
@@ -106,7 +121,7 @@ function CadastroPage() {
               <DropdownMenuItem
                 onSelect={() =>
                   setMovementRequest({
-                    key: crypto.randomUUID(),
+                    key: createUuid(),
                     product,
                     type: "entry",
                   })
@@ -117,7 +132,7 @@ function CadastroPage() {
               <DropdownMenuItem
                 onSelect={() =>
                   setMovementRequest({
-                    key: crypto.randomUUID(),
+                    key: createUuid(),
                     product,
                     type: "exit",
                   })
@@ -140,19 +155,39 @@ function CadastroPage() {
       "—",
       category.status === "active" ? "Ativa" : "Inativa",
     ],
+    actions: canManageCatalog ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setEditingCategory(category)}
+      >
+        <Pencil /> Editar
+      </Button>
+    ) : undefined,
   }));
   const supplierRows = (catalog.suppliers.data ?? []).map((supplier) => ({
     id: supplier.id,
     active: supplier.status === "active",
     cells: [
       supplier.name,
-      "—",
-      "—",
+      supplier.trade_name ?? "—",
+      supplier.cnpj ? formatCnpj(supplier.cnpj) : "—",
       supplier.contact_name ?? "—",
       supplier.phone ?? "—",
       supplier.email ?? "—",
       supplier.status === "active" ? "Ativo" : "Inativo",
     ],
+    actions: canManageCatalog ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setEditingSupplier(supplier)}
+      >
+        <Pencil /> Editar
+      </Button>
+    ) : undefined,
   }));
 
   return (
@@ -162,15 +197,15 @@ function CadastroPage() {
         description="Produtos, categorias e fornecedores. Itens usados no histórico são inativados, nunca excluídos."
         actions={
           <>
-            <Button variant="outline" onClick={() => setOpen("categorias")}>
+            {canManageCatalog && <Button variant="outline" onClick={() => setOpen("categorias")}>
               <FolderTree /> Nova categoria
-            </Button>
-            <Button variant="outline" onClick={() => setOpen("fornecedores")}>
+            </Button>}
+            {canCreateSuppliers && <Button variant="outline" onClick={() => setOpen("fornecedores")}>
               <Building2 /> Novo fornecedor
-            </Button>
-            <Button onClick={() => setOpen("produtos")}>
+            </Button>}
+            {canEditProducts && <Button onClick={() => setOpen("produtos")}>
               <Plus /> Novo produto
-            </Button>
+            </Button>}
           </>
         }
       />
@@ -222,6 +257,7 @@ function CadastroPage() {
               "Status",
             ]}
             hasActions
+            canCreate={canEditProducts}
           />
         </TabsContent>
         <TabsContent value="categorias" className="mt-4">
@@ -235,6 +271,8 @@ function CadastroPage() {
             isLoading={catalog.categories.isLoading}
             loadError={catalog.categories.isError}
             columns={["Categoria", "Descrição", "Produtos", "Status"]}
+            hasActions
+            canCreate={canManageCatalog}
           />
         </TabsContent>
         <TabsContent value="fornecedores" className="mt-4">
@@ -256,6 +294,8 @@ function CadastroPage() {
               "E-mail",
               "Status",
             ]}
+            hasActions
+            canCreate={canCreateSuppliers}
           />
         </TabsContent>
       </Tabs>
@@ -263,20 +303,34 @@ function CadastroPage() {
       <ProductFormDialog
         open={open === "produtos"}
         onOpenChange={(o) => !o && setOpen(null)}
+        allowStatusChange={canManageCatalog}
       />
       <ProductFormDialog
         open={editingProduct !== null}
         onOpenChange={(o) => !o && setEditingProduct(null)}
         product={editingProduct ?? undefined}
+        allowStatusChange={canManageCatalog}
       />
       <MovementActions hideButtons request={movementRequest} />
       <CategoryFormDialog
-        open={open === "categorias"}
-        onOpenChange={(o) => !o && setOpen(null)}
+        open={open === "categorias" || editingCategory !== null}
+        category={editingCategory}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOpen(null);
+            setEditingCategory(null);
+          }
+        }}
       />
       <SupplierFormDialog
-        open={open === "fornecedores"}
-        onOpenChange={(o) => !o && setOpen(null)}
+        open={open === "fornecedores" || editingSupplier !== null}
+        supplier={editingSupplier}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOpen(null);
+            setEditingSupplier(null);
+          }
+        }}
       />
     </div>
   );
@@ -293,6 +347,7 @@ function ListPanel({
   isLoading,
   loadError,
   hasActions,
+  canCreate = true,
 }: {
   placeholder: string;
   onCreate: () => void;
@@ -309,6 +364,7 @@ function ListPanel({
   isLoading: boolean;
   loadError: boolean;
   hasActions?: boolean | undefined;
+  canCreate?: boolean | undefined;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ativos");
@@ -363,11 +419,11 @@ function ListPanel({
               ? "Nenhum registro corresponde aos filtros."
               : "Os registros aparecerão aqui após serem salvos."
           }
-          action={
+          action={canCreate ? (
             <Button size="sm" variant="outline" onClick={onCreate}>
               <Plus /> {createLabel}
             </Button>
-          }
+          ) : undefined}
           columns={columns.map((label) => ({ label }))}
         />
       ) : (

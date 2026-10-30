@@ -54,9 +54,11 @@ export async function recordMovementBatch(
   client: SupabaseClient,
   input: MovementBatchInput,
 ) {
+  // Importação de DANFE usa RPC própria para gravar nota, fornecedor e itens juntos.
   const procedure = input.invoice
     ? "record_stock_invoice_movement_batch"
     : "record_stock_movement_batch";
+  // Converte nomes do TypeScript para os campos esperados pela função PostgreSQL.
   const params = {
     p_unit_id: input.unitId,
     p_operational_at: input.operationalAt,
@@ -95,8 +97,10 @@ export async function recordMovementBatch(
           p_exit_type_code: input.exitTypeCode ?? null,
         }),
   };
+  // A RPC aplica estoque, lotes, idempotência e auditoria em uma transação no banco.
   const { data, error } = await client.rpc(procedure, params);
 
+  // Traduz erros conhecidos do banco em mensagens compreensíveis para a operação.
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") {
       throw new Error(
@@ -108,14 +112,17 @@ export async function recordMovementBatch(
         "Seu perfil n\u00e3o pode registrar movimentos nesta unidade.",
       );
     }
+    const message = error.message.toLowerCase();
     if (
-      error.code === "23505" ||
-      error.message.toLowerCase().includes("already been recorded")
+      message.includes("already been recorded") ||
+      (message.includes("invoice") && error.code === "23505")
     ) {
       throw new Error("Esta nota fiscal já foi registrada no estoque.");
     }
-    const message = error.message.toLowerCase();
-    if (message.includes("insufficient stock")) {
+    if (
+      message.includes("insufficient stock") ||
+      message.includes("selected lot has insufficient stock")
+    ) {
       throw new Error(
         "Um ou mais itens n\u00e3o t\u00eam saldo suficiente para a sa\u00edda.",
       );
@@ -130,10 +137,30 @@ export async function recordMovementBatch(
         "O lote informado j\u00e1 existe com outra data de validade.",
       );
     }
+    if (
+      message.includes("valid service and exit type") ||
+      message.includes("only exits may have service classification")
+    ) {
+      throw new Error("Selecione um período e tipo de saída válidos.");
+    }
+    if (message.includes("every item product must be active")) {
+      throw new Error(
+        "O produto selecionado está inativo ou não pertence a esta empresa. Atualize o catálogo e tente novamente.",
+      );
+    }
+    if (message.includes("every item needs a product")) {
+      throw new Error("Confira a quantidade informada para este produto.");
+    }
+    if (error.code === "23505") {
+      throw new Error(
+        "A movimentação entrou em conflito com um registro existente. Atualize os dados e tente novamente.",
+      );
+    }
     throw new Error(
-      "N\u00e3o foi poss\u00edvel registrar a movimenta\u00e7\u00e3o. Revise os dados e tente novamente.",
+      `Não foi possível registrar a movimentação. Revise os dados e tente novamente. Código de suporte: ${error.code || "indisponível"}.`,
     );
   }
+  // Só confirma para a tela quando o banco retorna o identificador do lote gravado.
   const result = data?.[0];
   if (!result)
     throw new Error("O Supabase n\u00e3o confirmou a movimenta\u00e7\u00e3o.");

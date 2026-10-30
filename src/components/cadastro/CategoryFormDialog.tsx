@@ -20,15 +20,18 @@ import {
 } from "@/lib/validation/schemas";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { explainBackendError } from "@/lib/supabase/catalog";
+import type { CategoryRecord } from "@/lib/supabase/catalog";
 
 const empty = { name: "", description: "", active: true };
 
 export function CategoryFormDialog({
   open,
   onOpenChange,
+  category,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  category?: CategoryRecord | null | undefined;
 }) {
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState<FieldErrors<typeof empty>>({});
@@ -39,11 +42,19 @@ export function CategoryFormDialog({
 
   useEffect(() => {
     if (open) {
-      setForm(empty);
+      setForm(
+        category
+          ? {
+              name: category.name,
+              description: category.description ?? "",
+              active: category.status === "active",
+            }
+          : empty,
+      );
       setErrors({});
       setBackendError(null);
     }
-  }, [open]);
+  }, [open, category]);
 
   const submit = async () => {
     const parsed = categorySchema.safeParse(form);
@@ -56,12 +67,22 @@ export function CategoryFormDialog({
       return setBackendError("Conecte uma sessão autorizada antes de salvar.");
     setSaving(true);
     try {
-      const { error } = await client.from("categories").insert({
-        company_id: profile.company_id,
+      const values = {
         name: parsed.data.name,
         description: parsed.data.description || null,
         status: parsed.data.active ? "active" : "inactive",
-      });
+      };
+      const result = category
+        ? await client
+            .from("categories")
+            .update(values)
+            .eq("id", category.id)
+            .eq("company_id", profile.company_id)
+        : await client.from("categories").insert({
+            company_id: profile.company_id,
+            ...values,
+          });
+      const { error } = result;
       if (error) return setBackendError(explainBackendError(error));
     } catch {
       return setBackendError(
@@ -71,9 +92,13 @@ export function CategoryFormDialog({
       setSaving(false);
     }
     setBackendError(null);
-    await queryClient.invalidateQueries({
-      queryKey: ["categories", profile.company_id],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["categories", profile.company_id],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["products"] }),
+      queryClient.invalidateQueries({ queryKey: ["inventory-snapshot"] }),
+    ]);
     onOpenChange(false);
   };
 
@@ -81,7 +106,9 @@ export function CategoryFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nova categoria</DialogTitle>
+          <DialogTitle>
+            {category ? "Editar categoria" : "Nova categoria"}
+          </DialogTitle>
           <DialogDescription>
             Categorias usadas em registros não são excluídas, apenas inativadas.
           </DialogDescription>
@@ -127,7 +154,11 @@ export function CategoryFormDialog({
             Cancelar
           </Button>
           <Button disabled={saving} onClick={() => void submit()}>
-            {saving ? "Salvando…" : "Salvar categoria"}
+            {saving
+              ? "Salvando…"
+              : category
+                ? "Salvar alterações"
+                : "Salvar categoria"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -96,6 +96,7 @@ export async function loadInventorySnapshot(
   from?: string | undefined,
   to?: string | undefined,
 ): Promise<InventorySnapshot> {
+  // Busca catálogo, saldos, lotes e histórico já limitados à empresa/unidade autorizada.
   const productQuery = client
     .from("products")
     .select(
@@ -141,6 +142,7 @@ export async function loadInventorySnapshot(
   if (from) legacyQuery = legacyQuery.gte("occurred_at", from);
   if (to) legacyQuery = legacyQuery.lte("occurred_at", to);
 
+  // As consultas independentes rodam juntas para compor uma fotografia consistente da tela.
   const [productResult, balanceResult, lotResult, batchResult, legacyResult] =
     await Promise.all([
       productQuery,
@@ -154,11 +156,13 @@ export async function loadInventorySnapshot(
   }
   if (legacyResult.error) throw legacyResult.error;
 
+  // A partir daqui os registros brutos são normalizados para os modelos usados pela UI.
   const productsRaw = (productResult.data ?? []) as Raw[];
   const balancesRaw = (balanceResult.data ?? []) as Raw[];
   const lotsRaw = (lotResult.data ?? []) as Raw[];
   const batchesRaw = (batchResult.data ?? []) as Raw[];
 
+  // O lote agrupa movimentos; os vínculos seguintes recuperam produto e usuário de cada item.
   const batchIds = batchesRaw.map((row) => text(row["id"])).filter(Boolean);
   const itemResult = batchIds.length
     ? await client
@@ -203,6 +207,7 @@ export async function loadInventorySnapshot(
 
   const productById = new Map(productsRaw.map((row) => [text(row["id"]), row]));
   const lotById = new Map(lotsRaw.map((row) => [text(row["id"]), row]));
+  // Soma os saldos por produto e por lote antes de montar os objetos finais.
   const balancesByProduct = new Map<string, number>();
   const balancesByLot = new Map<string, number>();
   for (const balance of balancesRaw) {
@@ -317,6 +322,7 @@ export async function loadInventorySnapshot(
       legacy: false,
     };
   });
+  // Mantém as saídas do backup antigo consultáveis sem misturá-las aos lotes novos.
   const legacyMovements: MovementBatch[] = ((legacyResult.data ?? []) as Raw[])
     .map((row): MovementBatch | null => {
       const payload = record(row["source_payload"]);

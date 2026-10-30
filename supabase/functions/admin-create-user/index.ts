@@ -8,6 +8,7 @@ const allowedOrigins = new Set([
 ]);
 
 Deno.serve(async (request) => {
+  // Define CORS e responde preflight antes de qualquer operação administrativa.
   const origin = request.headers.get("Origin");
   const corsHeaders = {
     ...(origin && allowedOrigins.has(origin)
@@ -31,6 +32,7 @@ Deno.serve(async (request) => {
   if (origin && !allowedOrigins.has(origin))
     return respond({ error: "Origem não autorizada." }, 403);
 
+  // Valida o token do chamador; a chave de serviço fica confinada nesta função.
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer "))
     return respond({ error: "Sessão inválida." }, 401);
@@ -52,6 +54,7 @@ Deno.serve(async (request) => {
   if (authError || !authUser.user)
     return respond({ error: "Sessão inválida ou expirada." }, 401);
 
+  // Confere no banco se o chamador tem perfil ativo e papel administrativo.
   const { data: callerProfile, error: profileError } = await admin
     .from("profiles")
     .select("company_id, role, status")
@@ -131,6 +134,7 @@ Deno.serve(async (request) => {
     );
   }
 
+  // Usa endereço interno para login por nome, sem simular e-mail de recuperação.
   const internalEmail = `${username}@users.isp.invalid`;
   const { data: created, error: createError } =
     await admin.auth.admin.createUser({
@@ -149,6 +153,7 @@ Deno.serve(async (request) => {
     );
   }
 
+  // Cria o vínculo empresa/unidade por RPC autorizada antes de salvar o nome de usuário.
   const { error: assignError } = await caller.rpc("admin_assign_profile", {
     p_user_id: created.user.id,
     p_company_id: callerProfile.company_id,

@@ -1,5 +1,6 @@
 BEGIN;
 
+-- Cabeçalho imutável do lote: guarda autor, escopo, classificação e chave de repetição.
 CREATE TABLE public.stock_movement_batches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
@@ -31,6 +32,7 @@ CREATE TABLE public.stock_movement_batches (
   )
 );
 
+-- Liga cada item do lote ao movimento de estoque efetivamente registrado.
 CREATE TABLE public.stock_movement_batch_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL,
@@ -121,6 +123,7 @@ DECLARE
   v_balance numeric;
   v_count integer := 0;
 BEGIN
+  -- Valida sessão, tipo, data, classificação e limites do conjunto antes de gravar.
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Authentication required.';
   END IF;
@@ -152,6 +155,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Valid service and exit type are required.';
   END IF;
 
+  -- Resolve empresa e exige acesso ativo do usuário à unidade escolhida.
   SELECT unit.company_id INTO v_company_id
   FROM public.units AS unit
   JOIN public.companies AS company ON company.id = unit.company_id
@@ -184,6 +188,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Supplier must be active and belong to the company.';
   END IF;
 
+  -- Guarda a requisição original para auditoria e comparação de repetição segura.
   v_request := jsonb_build_object(
     'unit_id', p_unit_id, 'movement_type', p_movement_type, 'operational_at', p_operational_at,
     'service_code', p_service_code, 'exit_type_code', p_exit_type_code,
@@ -191,6 +196,7 @@ BEGIN
     'note', nullif(trim(p_note), ''), 'items', p_items
   );
 
+  -- Serializa requisições com a mesma chave e impede baixa duplicada por repetição.
   PERFORM pg_advisory_xact_lock(hashtextextended(v_company_id::text || ':' || p_idempotency_key::text, 3));
   SELECT batch.* INTO v_existing
   FROM public.stock_movement_batches AS batch
@@ -214,6 +220,7 @@ BEGIN
     v_actor_id, p_idempotency_key, v_request
   ) RETURNING id INTO v_batch_id;
 
+  -- Valida cada produto, resolve lote e aplica o movimento dentro da transação.
   FOR v_item, v_item_index IN
     SELECT element.value, element.ordinality
     FROM jsonb_array_elements(p_items) WITH ORDINALITY AS element(value, ordinality)
@@ -267,6 +274,7 @@ BEGIN
     v_count := v_count + 1;
   END LOOP;
 
+  -- Registra auditoria somente depois que todos os itens foram aplicados com sucesso.
   INSERT INTO public.audit_logs (company_id, unit_id, actor_id, action, entity_type, entity_id, metadata)
   VALUES (
     v_company_id, p_unit_id, v_actor_id, 'stock_movement_batch_created', 'stock_movement_batch', v_batch_id,

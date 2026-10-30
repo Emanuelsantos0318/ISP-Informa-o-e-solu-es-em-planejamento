@@ -8,6 +8,7 @@ const allowedOrigins = new Set([
 ]);
 
 Deno.serve(async (request) => {
+  // Restringe origens aceitas e processa preflight das chamadas do navegador.
   const origin = request.headers.get("Origin");
   const corsHeaders = {
     ...(origin && allowedOrigins.has(origin)
@@ -26,10 +27,11 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS")
     return new Response("ok", { headers: corsHeaders });
   if (origin && !allowedOrigins.has(origin))
-    return json({ error: "Origem nÃ£o autorizada." }, 403);
+    return json({ error: "Origem não autorizada." }, 403);
   if (request.method !== "POST")
     return json({ error: "Método não permitido." }, 405);
 
+  // Confirma a sessão do administrador antes de consultar permissões e criar convite.
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer "))
     return json({ error: "Sessão inválida." }, 401);
@@ -51,6 +53,7 @@ Deno.serve(async (request) => {
   if (userError || !userResult.user)
     return json({ error: "Sessão inválida ou expirada." }, 401);
 
+  // O perfil ativo e o papel administrativo são verificados no banco, não no cliente.
   const { data: callerProfile, error: profileError } = await admin
     .from("profiles")
     .select("company_id, role, status")
@@ -64,10 +67,7 @@ Deno.serve(async (request) => {
     );
   }
   if (!callerProfile || callerProfile.status !== "active") {
-    return json(
-      { error: "Sua conta não possui um perfil ativo no ISP." },
-      403,
-    );
+    return json({ error: "Sua conta não possui um perfil ativo no ISP." }, 403);
   }
   if (!["admin", "super_admin"].includes(callerProfile.role))
     return json(
@@ -110,6 +110,7 @@ Deno.serve(async (request) => {
     return json({ error: "Informe nome, e-mail e perfil válidos." }, 400);
   }
 
+  // Gera o usuário e token de convite; depois associa o papel e a unidade autorizados.
   const { data: inviteResult, error: inviteError } =
     await admin.auth.admin.generateLink({
       type: "invite",
@@ -146,6 +147,7 @@ Deno.serve(async (request) => {
       400,
     );
   }
+  // Monta um link de retorno para a rota do ISP que conclui o aceite do convite.
   const inviteUrl = new URL(
     `${origin ?? "https://infosolutionsplannig.netlify.app"}/aceitar-convite`,
   );

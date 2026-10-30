@@ -9,6 +9,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { OperationalScopeProvider } from "@/lib/supabase/OperationalScopeProvider";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
+/** Decide entre configuração pendente, login, rotas públicas e área autenticada. */
 export function AccessGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = useRouterState({
@@ -24,6 +25,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Operadores começam direto no fluxo de saída para reduzir etapas no balcão.
     if (session && profile?.role === "operator" && pathname === "/")
       void router.navigate({ to: "/saida", replace: true });
   }, [pathname, profile?.role, router, session]);
@@ -45,6 +47,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       />
     );
   }
+  // Convite e redefinição precisam abrir antes da sessão normal estar estabelecida.
   if (isInviteAcceptance || isPasswordReset) return <>{children}</>;
   if (session && profile?.role === "operator" && pathname === "/")
     return (
@@ -80,6 +83,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
     setBusy(true);
     try {
       const identifier = email.trim().toLowerCase();
+      // Contas sem e-mail usam o identificador interno definido na criação da conta.
       const credentials = identifier.includes("@")
         ? { email: identifier, password }
         : { email: `${identifier}@users.isp.invalid`, password };
@@ -94,6 +98,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
     }
   };
 
+  // Sem perfil ativo, somente o formulário de autenticação é apresentado.
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="absolute right-4 top-4">

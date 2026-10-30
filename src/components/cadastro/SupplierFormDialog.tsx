@@ -21,6 +21,7 @@ import {
 import { formatCnpj } from "@/lib/validation/cnpj";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { explainBackendError } from "@/lib/supabase/catalog";
+import type { SupplierRecord } from "@/lib/supabase/catalog";
 
 const empty = {
   legalName: "",
@@ -41,9 +42,11 @@ const empty = {
 export function SupplierFormDialog({
   open,
   onOpenChange,
+  supplier,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  supplier?: SupplierRecord | null | undefined;
 }) {
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState<FieldErrors<typeof empty>>({});
@@ -54,11 +57,29 @@ export function SupplierFormDialog({
 
   useEffect(() => {
     if (open) {
-      setForm(empty);
+      setForm(
+        supplier
+          ? {
+              legalName: supplier.name,
+              tradeName: supplier.trade_name ?? "",
+              cnpj: supplier.cnpj ? formatCnpj(supplier.cnpj) : "",
+              stateRegistration: supplier.state_registration ?? "",
+              contactName: supplier.contact_name ?? "",
+              phone: supplier.phone ?? "",
+              email: supplier.email ?? "",
+              address: supplier.address ?? "",
+              city: supplier.city ?? "",
+              state: supplier.state ?? "",
+              postalCode: supplier.postal_code ?? "",
+              notes: supplier.notes ?? "",
+              active: supplier.status === "active",
+            }
+          : empty,
+      );
       setErrors({});
       setBackendError(null);
     }
-  }, [open]);
+  }, [open, supplier]);
 
   const set = (key: keyof typeof empty, value: string | boolean) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -74,8 +95,7 @@ export function SupplierFormDialog({
       return setBackendError("Conecte uma sessão autorizada antes de salvar.");
     setSaving(true);
     try {
-      const { error } = await client.from("suppliers").insert({
-        company_id: profile.company_id,
+      const values = {
         name: parsed.data.legalName,
         cnpj: parsed.data.cnpj.replace(/\D/g, "") || null,
         trade_name: parsed.data.tradeName || null,
@@ -89,7 +109,18 @@ export function SupplierFormDialog({
         email: parsed.data.email || null,
         notes: parsed.data.notes || null,
         status: parsed.data.active ? "active" : "inactive",
-      });
+      };
+      const result = supplier
+        ? await client
+            .from("suppliers")
+            .update(values)
+            .eq("id", supplier.id)
+            .eq("company_id", profile.company_id)
+        : await client.from("suppliers").insert({
+            company_id: profile.company_id,
+            ...values,
+          });
+      const { error } = result;
       if (error) return setBackendError(explainBackendError(error));
     } catch {
       return setBackendError(
@@ -99,9 +130,13 @@ export function SupplierFormDialog({
       setSaving(false);
     }
     setBackendError(null);
-    await queryClient.invalidateQueries({
-      queryKey: ["suppliers", profile.company_id],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["suppliers", profile.company_id],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["products"] }),
+      queryClient.invalidateQueries({ queryKey: ["inventory-snapshot"] }),
+    ]);
     onOpenChange(false);
   };
 
@@ -109,7 +144,9 @@ export function SupplierFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Novo fornecedor</DialogTitle>
+          <DialogTitle>
+            {supplier ? "Editar fornecedor" : "Novo fornecedor"}
+          </DialogTitle>
           <DialogDescription>
             Apenas o nome é obrigatório no cadastro inicial.
           </DialogDescription>
@@ -239,7 +276,11 @@ export function SupplierFormDialog({
             Cancelar
           </Button>
           <Button disabled={saving} onClick={() => void submit()}>
-            {saving ? "Salvando…" : "Salvar fornecedor"}
+            {saving
+              ? "Salvando…"
+              : supplier
+                ? "Salvar alterações"
+                : "Salvar fornecedor"}
           </Button>
         </DialogFooter>
       </DialogContent>

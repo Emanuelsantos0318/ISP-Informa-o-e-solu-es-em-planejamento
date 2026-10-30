@@ -10,6 +10,9 @@ verify_jwt = true
 [functions.admin-create-user]
 verify_jwt = true
 
+[functions.danfe-vision-ocr]
+verify_jwt = true
+
 [api]
 enabled = true
 # Port to use for the API URL.

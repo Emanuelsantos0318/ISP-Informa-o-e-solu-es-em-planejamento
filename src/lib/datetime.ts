@@ -15,6 +15,7 @@ export function nowInOperationalTz(now: Date = new Date()): {
   date: string;
   time: string;
 } {
+  // Todas as telas usam o mesmo fuso operacional, independentemente do computador.
   const p = Object.fromEntries(
     partsFormatter.formatToParts(now).map((x) => [x.type, x.value]),
   );
@@ -29,6 +30,7 @@ export function operationalDateTimeToIso(
   date: string,
   time: string,
 ): string | null {
+  // Valida a data de calendário antes de converter o horário de Salvador para UTC.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time))
     return null;
   const [year, month, day] = date.split("-").map(Number);
@@ -123,6 +125,7 @@ export function getPeriodRange(
   now: Date = new Date(),
   custom?: { from: string; to: string },
 ): { from: string; to: string } | null {
+  // Retorna limites inclusivos para filtros de relatórios e movimentações.
   const today = nowInOperationalTz(now).date;
   switch (preset) {
     case "hoje":

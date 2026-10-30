@@ -5,7 +5,6 @@ import {
   Clock3,
   History,
   Package2,
-  Search,
   ShieldAlert,
   UserRound,
 } from "lucide-react";
@@ -19,6 +18,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ProductPicker } from "@/components/movements/ProductPicker";
 import { ProductFormDialog } from "@/components/cadastro/ProductFormDialog";
 import { SelectedProductRow } from "@/components/movements/SelectedProductRow";
+import { MovementActions } from "@/components/movements/MovementActions";
+import type { MovementRequest } from "@/components/movements/MovementActions";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useCatalog } from "@/lib/supabase/useCatalog";
@@ -27,6 +28,7 @@ import { useInventorySnapshot } from "@/lib/supabase/useInventorySnapshot";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
 import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-settings";
 import { suggestServiceForTime } from "@/lib/rules/service-suggestion";
+import { createUuid } from "@/lib/uuid";
 import {
   EXIT_TYPES,
   SERVICE_OPTIONS,
@@ -51,6 +53,7 @@ import {
   type ProductPrefill,
 } from "@/lib/types";
 import { unitShort } from "@/lib/config/units";
+import "./saida.css";
 
 export const Route = createFileRoute("/saida")({
   head: () => ({
@@ -98,6 +101,7 @@ function timePart(value: string) {
 }
 
 function OperatorExitPage() {
+  // Carrega identidade, unidade, catálogo, regras e mutação usada pelo fluxo de saída.
   const { profile } = useAuth();
   const { units, unitId } = useOperationalScope();
   const catalog = useCatalog();
@@ -106,15 +110,12 @@ function OperatorExitPage() {
   const settingsQuery = useOperationalSettings();
   const operational = settingsQuery.data ?? DEFAULT_OPERATIONAL_SETTINGS;
   const scannerRef = useRef<HTMLInputElement>(null);
-  const [barcode, setBarcode] = useState("");
-  const [scanMessage, setScanMessage] = useState<string | null>(null);
-  const [scanMatches, setScanMatches] = useState<Product[] | null>(null);
-  const [showProductSearch, setShowProductSearch] = useState(false);
   const [createProductOpen, setCreateProductOpen] = useState(false);
   const [createProductPrefill, setCreateProductPrefill] =
     useState<ProductPrefill>({});
   const [pendingCreatedProductId, setPendingCreatedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(null);
   const [activeTab, setActiveTab] = useState("registrar");
   const [destination, setDestination] = useState<ExitDestinationCode | "">("");
   const [recipient, setRecipient] = useState("");
@@ -127,13 +128,13 @@ function OperatorExitPage() {
   const [productSearch, setProductSearch] = useState("");
   const [historyLimit, setHistoryLimit] = useState(50);
 
-  const unitName = units.find((unit) => unit.id === unitId)?.name;
   const products = catalog.products.data ?? EMPTY_PRODUCTS;
   const productById = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products],
   );
   const now = clock;
+  // Sugere o período pela configuração ativa da empresa e pelo horário de Salvador.
   const suggestion = suggestServiceForTime(
     now.time,
     operational.serviceTimeRules,
@@ -167,6 +168,7 @@ function OperatorExitPage() {
         ),
     [snapshotQuery.data?.movements],
   );
+  // Transforma lotes e itens em linhas para histórico, mantendo destino e responsável.
   const exitRows = useMemo<ExitRow[]>(
     () =>
       exitBatches.flatMap((movement) =>
@@ -233,12 +235,16 @@ function OperatorExitPage() {
     if (!created) return;
     setSelectedProduct(created);
     setActiveTab("registrar");
-    setScanMatches(null);
-    setScanMessage(null);
-    setBarcode("");
-    setShowProductSearch(false);
     setPendingCreatedProductId("");
   }, [pendingCreatedProductId, products]);
+
+  // Atualiza o saldo do item selecionado após uma entrada sem perder o contexto da saída.
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const current = productById.get(selectedProduct.id);
+    if (current && current.balance !== selectedProduct.balance)
+      setSelectedProduct(current);
+  }, [productById, selectedProduct]);
 
   if (profile?.role !== "operator") {
     return (
@@ -256,14 +262,11 @@ function OperatorExitPage() {
   const selectProduct = (product: Product) => {
     setSelectedProduct(product);
     setActiveTab("registrar");
-    setScanMatches(null);
-    setScanMessage(null);
-    setBarcode("");
-    setShowProductSearch(false);
     setFormError(null);
     setSuccessMessage(null);
   };
 
+  // Valida destino/período e envia a saída ao banco em uma única operação idempotente.
   const recordExit = async (item: {
     product: Product;
     quantity: number;
@@ -304,7 +307,7 @@ function OperatorExitPage() {
         unitId,
         movementType: "exit",
         operationalAt,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: createUuid(),
         serviceCode: effectiveService,
         exitTypeCode: exitType,
         items: [
@@ -324,8 +327,6 @@ function OperatorExitPage() {
         `${item.product.name}: saída registrada para ${exitDestinationLabel(destination)}.`,
       );
       setSelectedProduct(null);
-      setBarcode("");
-      setScanMessage(null);
       setFormError(null);
     } catch (error) {
       setFormError(
@@ -334,28 +335,6 @@ function OperatorExitPage() {
           : "Não foi possível registrar a saída. Tente novamente.",
       );
     }
-  };
-
-  const scan = () => {
-    const value = barcode.trim();
-    if (!value) return;
-    const exact = products.filter(
-      (product) =>
-        product.barcode?.trim() === value ||
-        product.sku.trim().toLocaleLowerCase("pt-BR") ===
-          value.toLocaleLowerCase("pt-BR"),
-    );
-    if (exact.length === 1 && exact[0]) {
-      selectProduct(exact[0]);
-      return;
-    }
-    setScanMatches(exact.length > 1 ? exact : null);
-    setScanMessage(
-      exact.length > 1
-        ? "Há mais de um produto com esse código. Selecione o correto."
-        : "Código não encontrado no catálogo ativo desta unidade.",
-    );
-    if (exact.length === 0) setFormError(null);
   };
 
   const serviceName = (code: string | null) => {
@@ -368,63 +347,30 @@ function OperatorExitPage() {
   };
 
   return (
-    <div className="-mx-4 -mt-6 flex min-h-[calc(100vh-4rem)] flex-col bg-[#f1f7f7] md:-mx-6 lg:-mx-8">
+    <div className="exit-page">
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
         className="flex flex-1 flex-col"
       >
-        <div className="bg-[#0d3d43] px-4 pb-3 pt-4 text-white md:px-8">
-          <div className="mx-auto flex w-full max-w-[1220px] flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-semibold">
-                {unitName?.slice(0, 2).toLocaleUpperCase("pt-BR") ?? "IS"}
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-white/65">
-                  {unitName ?? "Unidade operacional"}
-                </p>
-                <h2 className="text-lg font-semibold md:text-xl">
-                  Saídas do Almoxarifado
-                </h2>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-sm font-semibold">{profile.full_name}</p>
-                <p className="text-xs text-white/65">Operador</p>
-              </div>
-              <span className="rounded-full border border-white/25 px-3 py-1.5 text-xs text-white/80">
-                {unitId ? "Unidade vinculada" : "Unidade indisponível"}
-              </span>
-            </div>
-          </div>
-          <div className="mx-auto mt-4 w-full max-w-[1220px]">
-            <TabsList className="h-auto flex-wrap justify-start gap-1 rounded-xl bg-white/10 p-1 text-white/75">
-              <TabsTrigger
-                value="registrar"
-                className="h-10 rounded-lg px-4 text-white/85 data-[state=active]:bg-white data-[state=active]:text-[#0d6264]"
-              >
+        <div className="exit-page__header">
+          <div className="exit-page__nav-wrap">
+            <TabsList className="exit-page__nav">
+              <TabsTrigger value="registrar" className="exit-page__nav-trigger">
                 <Barcode className="mr-2 size-4" /> Registrar saída
               </TabsTrigger>
-              <TabsTrigger
-                value="historico"
-                className="h-10 rounded-lg px-4 text-white/85 data-[state=active]:bg-white data-[state=active]:text-[#0d6264]"
-              >
+              <TabsTrigger value="historico" className="exit-page__nav-trigger">
                 <History className="mr-2 size-4" /> Histórico (
                 {exitBatches.length})
               </TabsTrigger>
-              <TabsTrigger
-                value="produtos"
-                className="h-10 rounded-lg px-4 text-white/85 data-[state=active]:bg-white data-[state=active]:text-[#0d6264]"
-              >
+              <TabsTrigger value="produtos" className="exit-page__nav-trigger">
                 <Package2 className="mr-2 size-4" /> Produtos
               </TabsTrigger>
             </TabsList>
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-[1220px] flex-1 px-4 py-6 md:px-0 md:py-7">
+        <div className="exit-page__content">
           {(catalog.products.isError || snapshotQuery.isError) && (
             <BackendNotice>
               Não foi possível carregar os dados desta unidade. Confira a
@@ -437,318 +383,257 @@ function OperatorExitPage() {
               administrador para revisar seu acesso.
             </BackendNotice>
           )}
-          <TabsContent value="registrar" className="mt-0 flex flex-col gap-5">
-            <section className="rounded-2xl border border-[#d7e5e5] bg-white p-5 shadow-sm md:p-6">
-              <Field label="Escaneie o código de barras" htmlFor="exit-scanner">
-                <div className="relative">
-                  <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#197c7e]" />
-                  <Input
-                    id="exit-scanner"
-                    ref={scannerRef}
-                    autoFocus
-                    className="h-[68px] border-[#168584] pl-12 font-mono text-xl shadow-[0_0_0_4px_rgba(16,124,124,0.13)] placeholder:font-sans placeholder:text-muted-foreground/80 md:text-2xl"
-                    placeholder="Aguardando leitura…"
-                    value={barcode}
-                    disabled={catalog.products.isLoading || !unitId}
-                    onChange={(event) => {
-                      setBarcode(event.target.value);
-                      setScanMessage(null);
-                      setScanMatches(null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        scan();
-                      }
-                    }}
-                  />
-                </div>
-              </Field>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock3 className="size-4" /> Período sugerido agora:
-                  <strong className="text-foreground">
-                    {suggestedService}
-                  </strong>
-                  <span className="text-xs">
-                    {formatIsoDate(now.date)} · {now.time} · Horário de Salvador
-                  </span>
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 rounded-xl border-[#d4e2e2] px-4"
-                  onClick={() => setShowProductSearch((open) => !open)}
-                  disabled={catalog.products.isLoading || !unitId}
-                >
-                  <Search />{" "}
-                  {showProductSearch
-                    ? "Fechar busca"
-                    : "Buscar por nome ou código"}
-                </Button>
-              </div>
-              {scanMessage && (
-                <div
-                  className={`mt-3 space-y-2 rounded-xl border p-3 ${scanMatches === null ? "border-amber-300 bg-amber-50" : "border-destructive/30 bg-destructive-soft"}`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  <p
-                    className={`text-sm ${scanMatches === null ? "text-amber-950" : "text-destructive"}`}
+          <TabsContent value="registrar" className="exit-page__tab-content">
+            <div className="exit-page__stack">
+              <section className="exit-page__panel exit-page__panel--padded">
+                {!selectedProduct && (
+                  <Field
+                    label="Leia o código de barras ou pesquise o produto"
+                    htmlFor="exit-product-search"
+                    hint="Use o leitor ou digite o nome, código ou SKU. As opções aparecem enquanto você digita."
                   >
-                    {scanMatches === null
-                      ? "Este código ainda não está no cadastro."
-                      : scanMessage}
-                  </p>
-                  {scanMatches === null && (
-                    <p className="text-xs text-amber-900/80">
-                      Cadastre o produto uma vez; depois, a leitura do código o
-                      localizará automaticamente.
-                    </p>
-                  )}
-                  {scanMatches?.map((product) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted"
-                      onClick={() => selectProduct(product)}
-                    >
-                      <span>{product.name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {product.barcode ?? product.sku}
-                      </span>
-                    </button>
-                  ))}
-                  {scanMatches === null && barcode.trim() && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
-                      onClick={() => {
-                        setCreateProductPrefill(prefillFromQuery(barcode));
+                    <ProductPicker
+                      products={products}
+                      onSelect={selectProduct}
+                      onRequestCreate={(query) => {
+                        setCreateProductPrefill(prefillFromQuery(query));
                         setCreateProductOpen(true);
                       }}
-                    >
-                      Cadastrar produto com este código
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 grid gap-5 border-t border-[#e4eded] pt-5 lg:grid-cols-2">
-                <div id="exit-destinations" className="space-y-2">
-                  <p className="text-sm font-semibold">
-                    Destino da liberação{" "}
-                    <span className="text-destructive">*</span>
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {EXIT_DESTINATIONS.map((option) => (
-                      <Button
-                        key={option.code}
-                        type="button"
-                        aria-pressed={destination === option.code}
-                        variant={
-                          destination === option.code ? "default" : "outline"
-                        }
-                        className="h-10 rounded-full px-4"
-                        onClick={() => {
-                          setDestination(option.code);
-                          setFormError(null);
-                          focusScanner();
-                        }}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Período</p>
-                    <ToggleGroup
-                      type="single"
-                      value={serviceCode}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setSelectedService(value as ServiceCode);
-                          setFormError(null);
-                          focusScanner();
-                        }
-                      }}
-                      className="flex flex-wrap justify-start gap-1.5"
-                    >
-                      {SERVICE_OPTIONS.map((service) => (
-                        <ToggleGroupItem
-                          key={service.code}
-                          value={service.code}
-                          aria-label={
-                            operational.serviceLabels[service.code] ??
-                            service.label
-                          }
-                          className="h-9 rounded-full border px-3 text-xs data-[state=on]:border-[#08736f] data-[state=on]:bg-[#08736f] data-[state=on]:text-white"
-                        >
-                          {operational.serviceLabels[service.code] ??
-                            service.label}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                    {suggestion.kind === "single" && !selectedService && (
-                      <p className="text-xs text-muted-foreground">
-                        Sugestão automática pelo horário atual.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Tipo de saída</p>
-                    <ToggleGroup
-                      type="single"
-                      value={exitType}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setExitType(value as ExitTypeCode);
-                          focusScanner();
-                        }
-                      }}
-                      className="flex flex-wrap justify-start gap-1.5"
-                    >
-                      {EXIT_TYPES.map((type) => (
-                        <ToggleGroupItem
-                          key={type.code}
-                          value={type.code}
-                          className="h-9 rounded-full border px-3 text-xs data-[state=on]:border-[#08736f] data-[state=on]:bg-[#08736f] data-[state=on]:text-white"
-                        >
-                          {operational.exitTypeLabels[type.code] ?? type.label}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 max-w-md">
-                <Field
-                  label="Quem está retirando (opcional)"
-                  htmlFor="exit-recipient"
-                >
-                  <div className="relative">
-                    <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="exit-recipient"
-                      maxLength={120}
-                      className="pl-9"
-                      value={recipient}
-                      onChange={(event) => setRecipient(event.target.value)}
-                      placeholder="Nome do servidor ou solicitante"
+                      liveSearch
+                      inputId="exit-product-search"
+                      inputRef={scannerRef}
+                      inputClassName="exit-page__scanner placeholder:text-muted-foreground/80 md:text-2xl"
+                      placeholder="Aguardando leitura ou digite o nome do produto…"
+                      disabled={catalog.products.isLoading || !unitId}
                     />
-                  </div>
-                </Field>
-              </div>
-
-              {showProductSearch && (
-                <div className="mt-5 rounded-2xl border border-[#cfe0e0] bg-[#f8fbfb] p-4 md:p-5">
-                  <div className="mb-4 flex items-start gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#dff1ef] text-[#0d6665]">
-                      <Search className="size-4" />
+                  </Field>
+                )}
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock3 className="size-4" /> Período sugerido agora:
+                    <strong className="text-foreground">
+                      {suggestedService}
+                    </strong>
+                    <span className="text-xs">
+                      {formatIsoDate(now.date)} · {now.time} · Horário de
+                      Salvador
                     </span>
-                    <div>
-                      <h3 className="font-semibold">
-                        Buscar produto pelo nome
-                      </h3>
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        Digite parte do nome, o código de barras ou o SKU. Se
-                        ainda não existir, você poderá cadastrá-lo aqui.
-                      </p>
+                  </p>
+                </div>
+                <div className="exit-page__selection">
+                  <div id="exit-destinations" className="space-y-2">
+                    <p className="text-sm font-semibold">
+                      Destino da liberação{" "}
+                      <span className="text-destructive">*</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {EXIT_DESTINATIONS.map((option) => (
+                        <Button
+                          key={option.code}
+                          type="button"
+                          aria-pressed={destination === option.code}
+                          variant={
+                            destination === option.code ? "default" : "outline"
+                          }
+                          className="h-10 rounded-full px-4"
+                          onClick={() => {
+                            setDestination(option.code);
+                            setFormError(null);
+                            focusScanner();
+                          }}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
                     </div>
                   </div>
-                  <ProductPicker
-                    products={products}
-                    onSelect={selectProduct}
-                    onRequestCreate={(query) => {
-                      setCreateProductPrefill(prefillFromQuery(query));
-                      setCreateProductOpen(true);
-                    }}
-                  />
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold">Período</p>
+                      <ToggleGroup
+                        type="single"
+                        value={serviceCode}
+                        onValueChange={(value) => {
+                          if (value) {
+                            setSelectedService(value as ServiceCode);
+                            setFormError(null);
+                            focusScanner();
+                          }
+                        }}
+                        className="flex flex-wrap justify-start gap-1.5"
+                      >
+                        {SERVICE_OPTIONS.map((service) => (
+                          <ToggleGroupItem
+                            key={service.code}
+                            value={service.code}
+                            aria-label={
+                              operational.serviceLabels[service.code] ??
+                              service.label
+                            }
+                            className="h-9 rounded-full border px-3 text-xs data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          >
+                            {operational.serviceLabels[service.code] ??
+                              service.label}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                      {suggestion.kind === "single" && !selectedService && (
+                        <p className="text-xs text-muted-foreground">
+                          Sugestão automática pelo horário atual.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold">Tipo de saída</p>
+                      <ToggleGroup
+                        type="single"
+                        value={exitType}
+                        onValueChange={(value) => {
+                          if (value) {
+                            setExitType(value as ExitTypeCode);
+                            focusScanner();
+                          }
+                        }}
+                        className="flex flex-wrap justify-start gap-1.5"
+                      >
+                        {EXIT_TYPES.map((type) => (
+                          <ToggleGroupItem
+                            key={type.code}
+                            value={type.code}
+                            className="h-9 rounded-full border px-3 text-xs data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          >
+                            {operational.exitTypeLabels[type.code] ??
+                              type.label}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {selectedProduct && (
-                <div className="mt-5" aria-live="polite">
-                  <SelectedProductRow
-                    key={selectedProduct.id}
-                    product={selectedProduct}
-                    mode="saida"
-                    initialQuantity="1"
-                    actionLabel="Confirmar saída"
-                    submitting={movement.isPending}
-                    onCancel={() => setSelectedProduct(null)}
-                    onAdd={(item) => void recordExit(item)}
-                  />
+                <div className="mt-4 max-w-md">
+                  <Field
+                    label="Quem está retirando (opcional)"
+                    htmlFor="exit-recipient"
+                  >
+                    <div className="relative">
+                      <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="exit-recipient"
+                        maxLength={120}
+                        className="pl-9"
+                        value={recipient}
+                        onChange={(event) => setRecipient(event.target.value)}
+                        placeholder="Nome do servidor ou solicitante"
+                      />
+                    </div>
+                  </Field>
                 </div>
-              )}
 
-              {formError && (
-                <p
-                  role="alert"
-                  className="mt-4 rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 text-sm text-destructive"
-                >
-                  {formError}
-                </p>
-              )}
-              {successMessage && (
-                <p
-                  role="status"
-                  className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
-                >
-                  {successMessage} Pronto para a próxima leitura.
-                </p>
-              )}
-            </section>
+                {selectedProduct && (
+                  <div className="mt-5" aria-live="polite">
+                    {selectedProduct.balance <= 0 && (
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                        <p className="text-sm">
+                          Este produto está sem saldo. Registre a entrada aqui e
+                          depois continue com a saída.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="success"
+                          onClick={() =>
+                            setEntryRequest({
+                              key: createUuid(),
+                              product: selectedProduct,
+                              type: "entry",
+                            })
+                          }
+                        >
+                          Adicionar estoque
+                        </Button>
+                      </div>
+                    )}
+                    <SelectedProductRow
+                      key={selectedProduct.id}
+                      product={selectedProduct}
+                      mode="saida"
+                      initialQuantity="1"
+                      actionLabel="Confirmar saída"
+                      submitting={movement.isPending}
+                      onCancel={() => setSelectedProduct(null)}
+                      onAdd={(item) => void recordExit(item)}
+                    />
+                  </div>
+                )}
 
-            <section className="overflow-hidden rounded-2xl border border-[#d7e5e5] bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-2 pt-5 md:px-6">
-                <div>
-                  <h3 className="text-lg font-semibold">Últimas saídas</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Horário local de Salvador
+                {formError && (
+                  <p
+                    role="alert"
+                    className="exit-page__notice exit-page__notice--error"
+                  >
+                    {formError}
                   </p>
+                )}
+                {successMessage && (
+                  <p
+                    role="status"
+                    className="exit-page__notice exit-page__notice--success"
+                  >
+                    {successMessage} Pronto para a próxima leitura.
+                  </p>
+                )}
+              </section>
+
+              <section className="exit-page__panel">
+                <div className="exit-page__panel-heading">
+                  <div>
+                    <h3 className="exit-page__panel-title">Últimas saídas</h3>
+                    <p className="exit-page__panel-copy">
+                      Horário local de Salvador
+                    </p>
+                  </div>
+                  <span className="exit-page__panel-meta">
+                    {latestRows.length} itens recentes
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {latestRows.length} itens recentes
-                </span>
+                {snapshotQuery.isLoading ? (
+                  <div className="p-6">
+                    <BackendNotice>
+                      Carregando histórico de saídas…
+                    </BackendNotice>
+                  </div>
+                ) : latestRows.length === 0 ? (
+                  <div className="p-6">
+                    <EmptyState
+                      compact
+                      icon={History}
+                      title="Ainda não há saídas nesta unidade"
+                      description="As retiradas registradas aparecerão aqui."
+                    />
+                  </div>
+                ) : (
+                  <ExitTable rows={latestRows} serviceName={serviceName} />
+                )}
+              </section>
+              <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
+                <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  O saldo baixa somente após confirmar a saída. O destino e as
+                  unidades liberadas ficam registrados no histórico.
+                </p>
               </div>
-              {snapshotQuery.isLoading ? (
-                <div className="p-6">
-                  <BackendNotice>Carregando histórico de saídas…</BackendNotice>
-                </div>
-              ) : latestRows.length === 0 ? (
-                <div className="p-6">
-                  <EmptyState
-                    compact
-                    icon={History}
-                    title="Ainda não há saídas nesta unidade"
-                    description="As retiradas registradas aparecerão aqui."
-                  />
-                </div>
-              ) : (
-                <ExitTable rows={latestRows} serviceName={serviceName} />
-              )}
-            </section>
-            <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
-              <p>
-                O saldo baixa somente após confirmar a saída. O destino e as
-                unidades liberadas ficam registrados no histórico.
-              </p>
             </div>
           </TabsContent>
 
-          <TabsContent value="historico" className="mt-0">
-            <section className="overflow-hidden rounded-2xl border border-[#d7e5e5] bg-white shadow-sm">
-              <div className="flex flex-wrap items-end justify-between gap-4 border-b px-5 py-5 md:px-6">
+          <TabsContent value="historico" className="exit-page__tab-content">
+            <section className="exit-page__panel">
+              <div className="exit-page__panel-heading exit-page__panel-heading--bordered">
                 <div>
-                  <h3 className="text-lg font-semibold">Histórico de saídas</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="exit-page__panel-title">
+                    Histórico de saídas
+                  </h3>
+                  <p className="exit-page__panel-copy exit-page__panel-copy--regular">
                     {exitBatches.length} registros · {exitRows.length} itens
                   </p>
                 </div>
@@ -795,12 +680,14 @@ function OperatorExitPage() {
             </section>
           </TabsContent>
 
-          <TabsContent value="produtos" className="mt-0">
-            <section className="overflow-hidden rounded-2xl border border-[#d7e5e5] bg-white shadow-sm">
-              <div className="flex flex-wrap items-end justify-between gap-4 border-b px-5 py-5 md:px-6">
+          <TabsContent value="produtos" className="exit-page__tab-content">
+            <section className="exit-page__panel">
+              <div className="exit-page__panel-heading exit-page__panel-heading--bordered">
                 <div>
-                  <h3 className="text-lg font-semibold">Produtos da unidade</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="exit-page__panel-title">
+                    Produtos da unidade
+                  </h3>
+                  <p className="exit-page__panel-copy exit-page__panel-copy--regular">
                     Consulta de saldo e código para facilitar as retiradas.
                   </p>
                 </div>
@@ -827,33 +714,29 @@ function OperatorExitPage() {
                   />
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="exit-page__table-scroll">
+                  <table className="exit-page__table exit-page__product-table">
+                    <thead>
                       <tr>
-                        <th className="px-5 py-3">Produto</th>
-                        <th className="px-5 py-3">Código</th>
-                        <th className="px-5 py-3">Unidade</th>
-                        <th className="px-5 py-3 text-right">Saldo</th>
-                        <th className="px-5 py-3"></th>
+                        <th>Produto</th>
+                        <th>Código</th>
+                        <th>Unidade</th>
+                        <th className="text-right">Saldo</th>
+                        <th></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody>
                       {matchingProducts.map((product) => (
                         <tr key={product.id}>
-                          <td className="px-5 py-3 font-medium">
-                            {product.name}
-                          </td>
-                          <td className="px-5 py-3 font-mono text-xs">
+                          <td className="font-medium">{product.name}</td>
+                          <td className="font-mono text-xs">
                             {product.barcode ?? product.sku}
                           </td>
-                          <td className="px-5 py-3">
-                            {unitShort(product.unit) || product.unit}
-                          </td>
-                          <td className="px-5 py-3 text-right tabular-nums">
+                          <td>{unitShort(product.unit) || product.unit}</td>
+                          <td className="text-right tabular-nums">
                             {product.balance.toLocaleString("pt-BR")}
                           </td>
-                          <td className="px-5 py-3 text-right">
+                          <td className="text-right">
                             <Button
                               size="sm"
                               variant="outline"
@@ -879,6 +762,7 @@ function OperatorExitPage() {
         prefill={createProductPrefill}
         onCreated={setPendingCreatedProductId}
       />
+      <MovementActions hideButtons request={entryRequest} />
     </div>
   );
 }
@@ -891,9 +775,9 @@ function ExitTable({
   serviceName: (code: string | null) => string;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] text-left text-sm">
-        <thead className="bg-[#f7fafa] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="exit-page__table-scroll">
+      <table className="exit-page__table exit-page__history-table">
+        <thead>
           <tr>
             {[
               "Data",
@@ -905,22 +789,20 @@ function ExitTable({
               "Destino",
               "Código",
             ].map((label) => (
-              <th key={label} className="px-4 py-3">
-                {label}
-              </th>
+              <th key={label}>{label}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#e0eaea]">
+        <tbody>
           {rows.map((row) => (
-            <tr key={row.key} className="hover:bg-[#f8fbfb]">
-              <td className="whitespace-nowrap px-4 py-3 tabular-nums">
+            <tr key={row.key}>
+              <td className="whitespace-nowrap tabular-nums">
                 {datePart(row.occurredAt)}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs tabular-nums">
+              <td className="whitespace-nowrap font-mono text-xs tabular-nums">
                 {timePart(row.occurredAt)}
               </td>
-              <td className="px-4 py-3">
+              <td>
                 <span className="font-medium">{serviceName(row.service)}</span>
                 {row.exitType && (
                   <span className="block text-xs text-muted-foreground">
@@ -928,16 +810,14 @@ function ExitTable({
                   </span>
                 )}
               </td>
-              <td className="min-w-52 px-4 py-3 font-medium">
-                {row.productName}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+              <td className="min-w-52 font-medium">{row.productName}</td>
+              <td className="whitespace-nowrap text-right tabular-nums">
                 {row.releasedUnits !== null
                   ? `${row.releasedUnits.toLocaleString("pt-BR")} un. (${row.quantity.toLocaleString("pt-BR")} ${unitShort(row.unit) || row.unit})`
                   : `${row.quantity.toLocaleString("pt-BR")} ${unitShort(row.unit) || row.unit}`}
               </td>
-              <td className="px-4 py-3">{row.responsible}</td>
-              <td className="px-4 py-3">
+              <td>{row.responsible}</td>
+              <td>
                 {exitDestinationLabel(row.destination)}
                 {row.recipient && (
                   <span className="block text-xs text-muted-foreground">
@@ -945,7 +825,7 @@ function ExitTable({
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 font-mono text-xs">{row.barcode}</td>
+              <td className="font-mono text-xs">{row.barcode}</td>
             </tr>
           ))}
         </tbody>

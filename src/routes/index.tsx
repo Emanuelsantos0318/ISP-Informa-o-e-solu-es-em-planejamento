@@ -270,18 +270,41 @@ function Dashboard() {
         >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={daily}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
+              <CartesianGrid
+                stroke="var(--border)"
+                strokeDasharray="4 4"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="day"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              />
+              <YAxis
+                allowDecimals={false}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "var(--popover)",
+                  borderColor: "var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  color: "var(--popover-foreground)",
+                  boxShadow: "var(--shadow-card-value)",
+                }}
+                cursor={{ fill: "var(--muted)" }}
+              />
               <Bar
                 dataKey="Entradas"
-                fill="hsl(var(--success))"
+                fill="var(--success)"
                 radius={[4, 4, 0, 0]}
               />
               <Bar
                 dataKey="Saídas"
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>
@@ -294,19 +317,39 @@ function Dashboard() {
         >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byService} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <CartesianGrid
+                stroke="var(--border)"
+                strokeDasharray="4 4"
+                horizontal={false}
+              />
+              <XAxis
+                type="number"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              />
               <YAxis
                 type="category"
                 dataKey="name"
                 width={120}
-                tick={{ fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
               />
-              <Tooltip />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "var(--popover)",
+                  borderColor: "var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  color: "var(--popover-foreground)",
+                  boxShadow: "var(--shadow-card-value)",
+                }}
+                cursor={{ fill: "var(--muted)" }}
+              />
               <Bar
                 dataKey="quantity"
                 name="Quantidade"
-                fill="hsl(var(--chart-2))"
+                fill="var(--chart-2)"
                 radius={[0, 4, 4, 0]}
               />
             </BarChart>

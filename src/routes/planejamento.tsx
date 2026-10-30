@@ -298,6 +298,15 @@ function PlanningPage() {
     movements,
     operational.serviceLabels,
   );
+  const entryItemCount = movements
+    .filter((movement) => movement.type === "entry")
+    .reduce((sum, movement) => sum + movement.itemCount, 0);
+  const exitItemCount = movements
+    .filter((movement) => movement.type === "exit")
+    .reduce((sum, movement) => sum + movement.itemCount, 0);
+  const attentionProductCount = reorderRows.filter(({ status }) =>
+    ["sem_saldo", "critico", "baixo"].includes(status),
+  ).length;
   const statusCounts = (Object.keys(STOCK_STATUS_LABEL) as StockStatus[]).map(
     (status) => ({
       status,
@@ -338,7 +347,40 @@ function PlanningPage() {
         for (const row of reportRows) worksheet.addRow(Object.values(row));
       }
       worksheet.getRow(1).font = { bold: true, size: 16 };
-      worksheet.getRow(4).font = { bold: true };
+      worksheet.getRow(2).font = { color: { argb: "FF526176" }, size: 10 };
+      const headerRow = worksheet.getRow(4);
+      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF173A6B" },
+        };
+        cell.alignment = { vertical: "middle", wrapText: true };
+        cell.border = {
+          bottom: { style: "medium", color: { argb: "FF0E7490" } },
+        };
+      });
+      worksheet.views = [{ state: "frozen", ySplit: 4 }];
+      if (reportRows.length) {
+        worksheet.autoFilter = {
+          from: { row: 4, column: 1 },
+          to: { row: 4, column: Object.keys(reportRows[0] ?? {}).length },
+        };
+        for (let rowNumber = 5; rowNumber <= worksheet.rowCount; rowNumber++) {
+          const row = worksheet.getRow(rowNumber);
+          row.alignment = { vertical: "middle", wrapText: true };
+          if (rowNumber % 2 === 0)
+            row.eachCell((cell) => {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFF3F6FA" },
+              };
+            });
+        }
+      }
       worksheet.columns.forEach((column, index) => {
         let width = 14;
         for (const value of worksheet.getColumn(index + 1).values ?? [])
@@ -586,8 +628,9 @@ function PlanningPage() {
             <button
               key={item.key}
               type="button"
+              aria-pressed={report === item.key}
               onClick={() => setReport(item.key)}
-              className={`surface flex items-start gap-3 p-4 text-left transition ${report === item.key ? "ring-2 ring-primary" : "hover:border-primary/50"}`}
+              className={`surface flex items-start gap-3 p-4 text-left transition ${report === item.key ? "border-primary bg-primary-soft/40 ring-2 ring-primary/30 shadow-raised" : "hover:border-primary/50 hover:bg-muted/30"}`}
             >
               <span className="flex size-9 items-center justify-center rounded-md bg-primary-soft text-primary">
                 <item.icon className="size-4.5" />
@@ -646,8 +689,34 @@ function PlanningPage() {
             id="report-preview"
             className="overflow-x-auto print:overflow-visible"
           >
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
+              <ReportMetric
+                label="Linhas no relatório"
+                value={reportRows.length}
+                detail="Registros incluídos nos filtros"
+                tone="primary"
+              />
+              <ReportMetric
+                label="Itens de entrada"
+                value={entryItemCount}
+                detail="Linhas recebidas no período"
+                tone="success"
+              />
+              <ReportMetric
+                label="Itens de saída"
+                value={exitItemCount}
+                detail="Linhas baixadas no período"
+                tone="warning"
+              />
+              <ReportMetric
+                label="Produtos para atenção"
+                value={attentionProductCount}
+                detail="Sem saldo, crítico ou abaixo do mínimo"
+                tone="danger"
+              />
+            </div>
             <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <thead className="sticky top-0 bg-primary text-xs text-primary-foreground">
                 <tr>
                   {Object.keys(reportRows[0] ?? { Resultado: "" }).map(
                     (key) => (
@@ -658,9 +727,9 @@ function PlanningPage() {
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-border/70">
                 {reportRows.slice(0, 100).map((row, index) => (
-                  <tr key={index}>
+                  <tr key={index} className="transition-colors odd:bg-muted/20 hover:bg-primary-soft/30">
                     {Object.values(row).map((value, column) => (
                       <td key={column} className="px-3 py-2">
                         {String(value)}
@@ -684,6 +753,34 @@ function PlanningPage() {
           </div>
         </Panel>
       </section>
+    </div>
+  );
+}
+
+function ReportMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  tone: "primary" | "success" | "warning" | "danger";
+}) {
+  const tones = {
+    primary: "border-primary/25 bg-primary-soft/50 text-primary",
+    success: "border-success/25 bg-success-soft/60 text-success",
+    warning: "border-warning/35 bg-warning-soft/70 text-warning-foreground",
+    danger: "border-destructive/25 bg-destructive-soft/60 text-destructive",
+  };
+  return (
+    <div className={`rounded-xl border p-4 ${tones[tone]}`}>
+      <p className="text-xs font-medium opacity-90">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">
+        {value.toLocaleString("pt-BR")}
+      </p>
+      <p className="mt-1 text-[11px] text-foreground/70">{detail}</p>
     </div>
   );
 }

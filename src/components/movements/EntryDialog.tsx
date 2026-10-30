@@ -34,7 +34,15 @@ import {
 import { useCatalog } from "@/lib/supabase/useCatalog";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useMovementBatch } from "@/lib/supabase/useMovementBatch";
+import { createUuid } from "@/lib/uuid";
 import { DanfeImportDialog, type ImportedInvoice } from "./DanfeImportDialog";
+import {
+  PurchaseOrderImportDialog,
+  type ImportedPurchaseOrder,
+} from "./PurchaseOrderImportDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { unitShort } from "@/lib/config/units";
+import { toast } from "sonner";
 
 export function EntryDialog({
   open,
@@ -63,6 +71,11 @@ export function EntryDialog({
   const [danfeOpen, setDanfeOpen] = useState(false);
   const [invoice, setInvoice] = useState<ImportedInvoice | null>(null);
   const [invoiceHasMappedLines, setInvoiceHasMappedLines] = useState(false);
+  const [purchaseOrderOpen, setPurchaseOrderOpen] = useState(false);
+  const [purchaseOrder, setPurchaseOrder] =
+    useState<ImportedPurchaseOrder | null>(null);
+  const [purchaseOrderReceiptConfirmed, setPurchaseOrderReceiptConfirmed] =
+    useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -80,6 +93,9 @@ export function EntryDialog({
     setInvoice(null);
     setInvoiceHasMappedLines(false);
     setDanfeOpen(false);
+    setPurchaseOrder(null);
+    setPurchaseOrderReceiptConfirmed(false);
+    setPurchaseOrderOpen(false);
   }, [open, initialProduct]);
 
   const confirm = async () => {
@@ -91,6 +107,10 @@ export function EntryDialog({
       errs.push(
         "Selecione o fornecedor da nota ou revise os dados do novo fornecedor.",
       );
+    if (purchaseOrder && !purchaseOrderReceiptConfirmed)
+      errs.push(
+        "Confirme que os produtos e as quantidades desta entrada correspondem ao recebimento físico.",
+      );
     if (!unitId) errs.push("Selecione uma unidade ativa.");
     const operationalAt = operationalDateTimeToIso(date, time);
     if (!operationalAt)
@@ -98,7 +118,7 @@ export function EntryDialog({
     setErrors(errs);
     setSubmitError(null);
     if (errs.length > 0 || !unitId || !operationalAt) return;
-    const requestKey = idempotencyKey ?? crypto.randomUUID();
+    const requestKey = idempotencyKey ?? createUuid();
     setIdempotencyKey(requestKey);
     try {
       await movement.mutateAsync({
@@ -108,7 +128,20 @@ export function EntryDialog({
         idempotencyKey: requestKey,
         supplierId: supplierId || null,
         sourceReference: origin,
-        note: notes,
+        note: [
+          notes.trim(),
+          purchaseOrder
+            ? "OC " +
+              purchaseOrder.number +
+              ": recebimento físico conferido; " +
+              purchaseOrder.receivedLineCount +
+              " item(ns) recebido(s), " +
+              purchaseOrder.notReceivedLineCount +
+              " não recebido(s)."
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
         invoice: invoice ?? undefined,
         items: items.map((item) => ({
           productId: item.product.id,
@@ -116,6 +149,11 @@ export function EntryDialog({
           lotNumber: item.lot,
           expiresOn: item.expiry,
         })),
+      });
+      const productNames = items.slice(0, 3).map((item) => item.product.name);
+      const remainingProducts = items.length - productNames.length;
+      toast.success("Entrada de produtos registrada", {
+        description: `${items.length} item(ns): ${productNames.join(", ")}${remainingProducts > 0 ? ` e mais ${remainingProducts}` : ""}. A entrada já está disponível em Movimentações.`,
       });
       setIdempotencyKey(null);
       onOpenChange(false);
@@ -203,7 +241,25 @@ export function EntryDialog({
           <Button
             type="button"
             variant="outline"
-            disabled={Boolean(invoice) || items.length > 0 || Boolean(selected)}
+            disabled={
+              Boolean(invoice) ||
+              Boolean(purchaseOrder) ||
+              items.length > 0 ||
+              Boolean(selected)
+            }
+            onClick={() => setPurchaseOrderOpen(true)}
+          >
+            <FileUp /> Importar OC por PDF
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              Boolean(invoice) ||
+              Boolean(purchaseOrder) ||
+              items.length > 0 ||
+              Boolean(selected)
+            }
             onClick={() => setDanfeOpen(true)}
           >
             <FileUp /> Importar DANFE por PDF
@@ -214,10 +270,34 @@ export function EntryDialog({
               {invoice.accessKey ? "chave identificada" : "sem chave de acesso"}
             </span>
           )}
-          {!invoice && (items.length > 0 || selected) && (
+          {purchaseOrder && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-success">
+                OC {purchaseOrder.number} conferida ·{" "}
+                {purchaseOrder.receivedLineCount} recebido(s) ·{" "}
+                {purchaseOrder.notReceivedLineCount} não recebido(s)
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setItems([]);
+                  setSupplierId("");
+                  setOrigin((current) =>
+                    current === "OC " + purchaseOrder.number ? "" : current,
+                  );
+                  setPurchaseOrder(null);
+                  setPurchaseOrderReceiptConfirmed(false);
+                }}
+              >
+                Remover OC
+              </Button>
+            </div>
+          )}
+          {!invoice && !purchaseOrder && (items.length > 0 || selected) && (
             <span className="text-xs text-muted-foreground">
-              Para vincular uma DANFE, importe-a antes de adicionar ou
-              selecionar produtos.
+              Importe a OC ou DANFE antes de adicionar ou selecionar produtos.
             </span>
           )}
         </div>
@@ -236,10 +316,59 @@ export function EntryDialog({
               O catálogo não pôde ser carregado para esta sessão.
             </BackendNotice>
           )}
-          {invoiceHasMappedLines ? (
+          {purchaseOrder && (
+            <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+              <p className="font-medium">
+                Recebimento da OC {purchaseOrder.number} conferido; entrada ainda não lançada
+              </p>
+              <p className="text-muted-foreground">
+                Os itens só serão registrados nas movimentações e somados ao estoque quando você clicar em “Registrar entrada no estoque” ao final deste formulário.
+              </p>
+              <p className="text-muted-foreground">
+                Data prevista:{" "}
+                {purchaseOrder.expectedDeliveryDate
+                  ? purchaseOrder.expectedDeliveryDate
+                      .split("-")
+                      .reverse()
+                      .join("/")
+                  : "não informada"}
+                {purchaseOrder.total
+                  ? " · Total pedido: R$ " + purchaseOrder.total
+                  : ""}
+              </p>
+              <ul className="max-h-36 list-inside list-disc overflow-y-auto text-xs">
+                {purchaseOrder.lines.map((line, index) => {
+                  return (
+                    <li key={line.supplierCode + "-" + index}>
+                      {line.productName}: {line.receivedQuantity}{" "}
+                      {unitShort(line.productUnit)} recebido(s) (pedido:{" "}
+                      {line.orderedQuantity} {line.packageDescription})
+                    </li>
+                  );
+                })}
+              </ul>
+              {purchaseOrder.notReceivedLineCount > 0 && (
+                <p className="text-xs">
+                  {purchaseOrder.notReceivedLineCount} item(ns) marcado(s) como
+                  não recebido(s); não serão lançados no estoque.
+                </p>
+              )}
+              <label className="flex items-start gap-2 border-t border-warning/30 pt-2">
+                <Checkbox
+                  checked={purchaseOrderReceiptConfirmed}
+                  onCheckedChange={(checked) =>
+                    setPurchaseOrderReceiptConfirmed(checked === true)
+                  }
+                />
+                Confirmei que esses produtos e quantidades chegaram fisicamente
+                e estão corretos para dar entrada.
+              </label>
+            </div>
+          )}
+          {purchaseOrder || invoiceHasMappedLines ? (
             <p className="text-xs text-muted-foreground">
-              Itens vinculados à DANFE. Revise as quantidades antes de
-              confirmar.
+              Itens conferidos com o documento. Revise antes de confirmar a
+              entrada.
             </p>
           ) : selected ? (
             <SelectedProductRow
@@ -247,10 +376,7 @@ export function EntryDialog({
               mode="entrada"
               onCancel={() => setSelected(null)}
               onAdd={(item) => {
-                setItems((cur) => [
-                  ...cur,
-                  { ...item, key: crypto.randomUUID() },
-                ]);
+                setItems((cur) => [...cur, { ...item, key: createUuid() }]);
                 setSelected(null);
               }}
             />
@@ -267,7 +393,10 @@ export function EntryDialog({
           <ItemsList
             items={items}
             showLot
-            onRemove={(k) => setItems((cur) => cur.filter((i) => i.key !== k))}
+            onRemove={(k) => {
+              setItems((cur) => cur.filter((i) => i.key !== k));
+              if (purchaseOrder) setPurchaseOrderReceiptConfirmed(false);
+            }}
           />
         </div>
 
@@ -308,7 +437,11 @@ export function EntryDialog({
             }
             onClick={() => void confirm()}
           >
-            {movement.isPending ? "Gravando\u2026" : "Confirmar entrada"}
+            {movement.isPending
+              ? "Registrando no estoque\u2026"
+              : purchaseOrder
+                ? "Registrar entrada no estoque"
+                : "Confirmar entrada"}
           </Button>
         </DialogFooter>
 
@@ -342,11 +475,37 @@ export function EntryDialog({
                 ...current,
                 ...importedItems.map((item) => ({
                   ...item,
-                  key: crypto.randomUUID(),
+                  key: createUuid(),
                 })),
               ]);
             }
             setSubmitError(null);
+          }}
+        />
+        <PurchaseOrderImportDialog
+          open={purchaseOrderOpen}
+          onOpenChange={setPurchaseOrderOpen}
+          onRequestCreateProduct={(query) => {
+            setPrefill(prefillFromQuery(query));
+            setCreating(true);
+          }}
+          onApply={({
+            supplierId: nextSupplier,
+            purchaseOrder: nextOrder,
+            items: receivedItems,
+          }) => {
+            setSupplierId(nextSupplier);
+            setPurchaseOrder(nextOrder);
+            setPurchaseOrderReceiptConfirmed(false);
+            setInvoice(null);
+            setInvoiceHasMappedLines(false);
+            setSelected(null);
+            setOrigin("OC " + nextOrder.number);
+            setItems(
+              receivedItems.map((item) => ({ ...item, key: createUuid() })),
+            );
+            setSubmitError(null);
+            setErrors([]);
           }}
         />
       </DialogContent>

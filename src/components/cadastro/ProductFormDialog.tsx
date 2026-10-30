@@ -77,6 +77,7 @@ export function ProductFormDialog({
   contextual,
   product,
   onCreated,
+  allowStatusChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -85,12 +86,17 @@ export function ProductFormDialog({
   contextual?: boolean | undefined;
   product?: CatalogProduct | undefined;
   onCreated?: ((productId: string) => void) | undefined;
+  allowStatusChange?: boolean | undefined;
 }) {
   const [form, setForm] = useState<FormState>(empty);
   const [errors, setErrors] = useState<FieldErrors<FormState>>({});
   const [saving, setSaving] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
   const { client, profile } = useAuth();
+  const canChangeStatus =
+    allowStatusChange ??
+    (profile !== null &&
+      ["super_admin", "admin", "stock_manager"].includes(profile.role));
   const queryClient = useQueryClient();
   const categoriesQuery = useQuery({
     queryKey: ["categories", profile?.company_id],
@@ -176,7 +182,8 @@ export function ProductFormDialog({
             : null,
         minimum_stock: parsed.data.minStock,
         desired_stock: parsed.data.maxStock,
-        status: parsed.data.active ? "active" : "inactive",
+        status:
+          !canChangeStatus || parsed.data.active ? "active" : "inactive",
       };
       const { data, error } = product
         ? await client
@@ -419,13 +426,15 @@ export function ProductFormDialog({
                 onCheckedChange={(v) => set("expiryControl", v)}
               />
             </label>
-            <label className="flex items-center justify-between gap-3 text-sm">
-              Produto ativo
-              <Switch
-                checked={form.active}
-                onCheckedChange={(v) => set("active", v)}
-              />
-            </label>
+            {canChangeStatus && (
+              <label className="flex items-center justify-between gap-3 text-sm">
+                Produto ativo
+                <Switch
+                  checked={form.active}
+                  onCheckedChange={(v) => set("active", v)}
+                />
+              </label>
+            )}
           </div>
           <Field
             label="Descrição"

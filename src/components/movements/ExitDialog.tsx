@@ -53,6 +53,8 @@ import {
 import { useCatalog } from "@/lib/supabase/useCatalog";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useMovementBatch } from "@/lib/supabase/useMovementBatch";
+import { createUuid } from "@/lib/uuid";
+import { toast } from "sonner";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
 import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-settings";
 
@@ -174,7 +176,7 @@ export function ExitDialog({
       !exitType
     )
       return;
-    const requestKey = idempotencyKey ?? crypto.randomUUID();
+    const requestKey = idempotencyKey ?? createUuid();
     setIdempotencyKey(requestKey);
     try {
       await movement.mutateAsync({
@@ -197,6 +199,9 @@ export function ExitDialog({
           lotNumber: item.lot,
           expiresOn: item.expiry,
         })),
+      });
+      toast.success("Saída registrada", {
+        description: `${items.length} item(ns) foram baixados do estoque e adicionados a Movimentações.`,
       });
       setIdempotencyKey(null);
       onOpenChange(false);
@@ -384,10 +389,7 @@ export function ExitDialog({
               mode="saida"
               onCancel={() => setSelected(null)}
               onAdd={(item) => {
-                setItems((cur) => [
-                  ...cur,
-                  { ...item, key: crypto.randomUUID() },
-                ]);
+                setItems((cur) => [...cur, { ...item, key: createUuid() }]);
                 setSelected(null);
               }}
             />

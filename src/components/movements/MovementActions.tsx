@@ -34,6 +34,7 @@ export function MovementActions({
   const [initialProduct, setInitialProduct] = useState<Product | undefined>();
   const { profile } = useAuth();
   const canCorrect =
+    profile?.role === "operator" ||
     profile?.role === "admin" ||
     profile?.role === "stock_manager" ||
     profile?.role === "super_admin";
@@ -67,7 +68,10 @@ export function MovementActions({
               size={size}
               onClick={() => setCorrectionOpen(true)}
             >
-              <Scale /> Ajuste / perda
+              <Scale />
+              {profile?.role === "operator"
+                ? "Ajustar quantidade"
+                : "Ajuste / perda"}
             </Button>
           )}
         </>

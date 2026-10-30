@@ -25,6 +25,7 @@ type ScopeState = {
 };
 const ScopeContext = createContext<ScopeState | null>(null);
 
+/** Resolve a unidade ativa que limita consultas e movimentações operacionais. */
 export function OperationalScopeProvider({
   children,
 }: {
@@ -33,6 +34,7 @@ export function OperationalScopeProvider({
   const { client, profile } = useAuth();
   const [chosenUnitId, setChosenUnitId] = useState<string | null>(null);
   const unitsQuery = useQuery({
+    // Lista somente unidades ativas da empresa já validada no perfil.
     queryKey: ["operational-units", profile?.company_id],
     queryFn: async () => {
       if (!client || !profile) return [];
@@ -53,6 +55,7 @@ export function OperationalScopeProvider({
   const unitId = profile?.unit_id ?? chosenUnitId;
 
   useEffect(() => {
+    // Administradores sem unidade fixa recuperam a última unidade escolhida, se ainda válida.
     if (!profile || !canChooseUnit || units.length === 0) return;
     const stored = window.localStorage.getItem(
       `isp.unit.${profile.company_id}`,
@@ -67,6 +70,7 @@ export function OperationalScopeProvider({
 
   const setUnitId = useCallback(
     (id: string) => {
+      // Impede escolher unidade fora da lista liberada para a empresa.
       if (!canChooseUnit || !units.some((unit) => unit.id === id)) return;
       setChosenUnitId(id);
       if (profile)

@@ -30,6 +30,7 @@ export function suggestServiceForTime(
   time: string,
   rules: TimeRule[] = SERVICE_TIME_RULES,
 ): ServiceSuggestion {
+  // Converte horário local em minutos e procura a faixa operacional configurada.
   const minutes = toMinutes(time);
   if (minutes === null) return { kind: "none" };
   const rule = rules.find((r) => {
@@ -54,6 +55,7 @@ export function applySuggestion(
   selection: ServiceSelection,
   suggestion: ServiceSuggestion,
 ): { selection: ServiceSelection; alternatives: ServiceCode[] } {
+  // Sugestão automática não substitui uma escolha manual já feita pelo operador.
   if (!selection.manual) {
     return {
       selection: {

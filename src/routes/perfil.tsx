@@ -8,6 +8,7 @@ import { Field } from "@/components/common/Field";
 import { PageIntro, Panel } from "@/components/common/Panel";
 import { ProfileAvatar } from "@/components/common/ProfileAvatar";
 import { useAuth } from "@/lib/supabase/AuthProvider";
+import { createUuid } from "@/lib/uuid";
 
 export const Route = createFileRoute("/perfil")({
   head: () => ({ meta: [{ title: "Meu perfil · ISP — Gestão de Estoque" }] }),
@@ -66,7 +67,7 @@ function ProfilePage() {
     try {
       if (photo) {
         const extension = PHOTO_TYPES[photo.type];
-        const path = `${session.user.id}/${crypto.randomUUID()}.${extension}`;
+        const path = `${session.user.id}/${createUuid()}.${extension}`;
         const { error: uploadError } = await client.storage
           .from("isp-profile-photos")
           .upload(path, photo, { contentType: photo.type, upsert: false });

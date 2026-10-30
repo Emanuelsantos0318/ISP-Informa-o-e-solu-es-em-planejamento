@@ -16,7 +16,7 @@ import { useCatalog } from "@/lib/supabase/useCatalog";
 import { useInvoiceHistory } from "@/lib/supabase/useInvoiceHistory";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import type { MovementBatchInput } from "@/lib/supabase/movements";
-import type { DanfeExtraction } from "@/lib/danfe/extract";
+import type { DanfeExtraction, DanfeVisionPage } from "@/lib/danfe/extract";
 import type { MovementItemDraft, Product } from "@/lib/types";
 import { formatCnpj, isValidCnpj } from "@/lib/validation/cnpj";
 
@@ -96,7 +96,7 @@ export function DanfeImportDialog({
 }) {
   const catalog = useCatalog();
   const invoices = useInvoiceHistory();
-  const { profile } = useAuth();
+  const { client, profile } = useAuth();
   const [extraction, setExtraction] = useState<DanfeExtraction | null>(null);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -213,13 +213,54 @@ export function DanfeImportDialog({
     }
     try {
       const { extractDanfePdf } = await import("@/lib/danfe/extract");
+      const recognizeWithVision = async (
+        imageBase64: string,
+        signal: AbortSignal,
+      ): Promise<DanfeVisionPage> => {
+        if (!client) throw new Error("Conexão com o ISP indisponível.");
+        const { data, error } = await client.functions.invoke<DanfeVisionPage>(
+          "danfe-vision-ocr",
+          {
+            body: { imageBase64, mimeType: "image/jpeg" },
+            signal,
+          },
+        );
+        if (error) {
+          let message = error.message;
+          if ("context" in error && error.context instanceof Response) {
+            try {
+              const payload: unknown = await error.context.clone().json();
+              if (
+                payload &&
+                typeof payload === "object" &&
+                "error" in payload &&
+                typeof payload.error === "string"
+              ) {
+                message = payload.error;
+              }
+            } catch {
+              // Se o servidor não retornar JSON, mantém a mensagem do SDK.
+            }
+          }
+          throw new Error(message);
+        }
+        if (!data || !Array.isArray(data.words))
+          throw new Error("A resposta do OCR externo está incompleta.");
+        return data;
+      };
       const result = await extractDanfePdf(
         file,
         setProgress,
         controller.signal,
+        recognizeWithVision,
       );
       if (controller.signal.aborted) return;
       abortController.current = null;
+      setError(
+        result.visionWarning
+          ? `OCR complementar indisponível: ${result.visionWarning} Revise os itens manualmente.`
+          : null,
+      );
       setExtraction(result);
       setSupplierName(result.supplierName);
       setInvoiceNumber(result.invoiceNumber);
@@ -363,6 +404,9 @@ export function DanfeImportDialog({
           items: extraction.items,
           pageCount: extraction.pageCount,
           usedOcr: extraction.usedOcr,
+          ocrProvider: extraction.ocrProvider,
+          visionAttempted: extraction.visionAttempted,
+          visionWarning: extraction.visionWarning,
           supplierName: extraction.supplierName,
         },
         newSupplier,
@@ -385,7 +429,9 @@ export function DanfeImportDialog({
         <DialogHeader>
           <DialogTitle>Importar DANFE por PDF</DialogTitle>
           <DialogDescription>
-            O arquivo é lido neste navegador e não é enviado ao Supabase. A
+            O arquivo é lido neste navegador. Se o OCR local reconhecer poucos
+            itens, as páginas necessárias serão enviadas ao Google Cloud Vision
+            por uma função autenticada. O PDF não é salvo no Supabase e a
             leitura não altera o estoque.
           </DialogDescription>
         </DialogHeader>
@@ -441,6 +487,11 @@ export function DanfeImportDialog({
                 <p>
                   Esta nota foi lida por OCR. Confira com o PDF cada descrição
                   e, principalmente, cada quantidade antes de importar.
+                  {extraction.ocrProvider === "google-vision" &&
+                    " O Google Cloud Vision foi usado como reforço para esta leitura."}
+                  {extraction.visionAttempted &&
+                    extraction.ocrProvider !== "google-vision" &&
+                    " A página também foi consultada pelo Google Cloud Vision, mas a leitura local foi mantida por apresentar mais itens estruturados."}
                 </p>
                 <label className="mt-2 flex items-center gap-2">
                   <input

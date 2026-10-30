@@ -28,6 +28,7 @@ export type NavItem = {
   operatorOnly?: boolean;
 };
 
+// Menu, permissões de exibição e títulos das rotas ficam definidos em uma única lista.
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Início", icon: LayoutDashboard, group: "operacao" },
   {

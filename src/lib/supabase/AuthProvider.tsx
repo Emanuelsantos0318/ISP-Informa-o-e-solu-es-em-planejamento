@@ -22,6 +22,7 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/** Centraliza sessão, perfil do ISP e estado de validação para toda a aplicação. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [client, setClient] = useState<SupabaseClient | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!client || !session) return;
+    // O perfil do banco determina empresa, unidade e papel; a sessão sozinha não libera o app.
     const { data, error } = await client
       .from("profiles")
       .select(
@@ -49,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [client, session]);
 
   useEffect(() => {
+    // Inicializa a conexão no navegador; durante SSR não há sessão local disponível.
     const supabase = createBrowserSupabaseClient();
     setClient(supabase);
     if (!supabase) {
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
+    // Cada troca de sessão limpa dados antigos antes de consultar o novo perfil.
     const loadProfile = async (nextSession: Session | null) => {
       setSession(nextSession);
       setProfile(null);
@@ -96,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    // Mantém sessão e perfil sincronizados em login, logout e renovação do token.
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
         if (!active) return;

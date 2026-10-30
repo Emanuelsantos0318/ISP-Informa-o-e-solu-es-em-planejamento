@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AccessGate } from "@/components/auth/AccessGate";
 import { AuthProvider } from "@/lib/supabase/AuthProvider";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -121,6 +122,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   },
 );
 
+// Estrutura HTML compartilhada: metadados, tema inicial, estilos e scripts do roteador.
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
@@ -141,6 +143,7 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Provedores globais disponibilizam cache, autenticação, tema e proteção de acesso às rotas.
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -151,6 +154,7 @@ function RootComponent() {
           <AccessGate>
             <Outlet />
           </AccessGate>
+          <Toaster position="top-right" richColors closeButton />
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>

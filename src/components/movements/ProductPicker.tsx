@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { Plus, ScanBarcode, Search, PackageX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,27 +14,42 @@ export function ProductPicker({
   onSelect,
   onRequestCreate,
   allowCreate = true,
+  liveSearch = false,
+  placeholder = "Digite o nome, código de barras ou SKU",
+  disabled = false,
+  inputId,
+  inputClassName,
+  inputRef,
 }: {
   products: Product[];
   onSelect: (p: Product) => void;
   onRequestCreate: (query: string) => void;
   allowCreate?: boolean | undefined;
+  liveSearch?: boolean | undefined;
+  placeholder?: string | undefined;
+  disabled?: boolean | undefined;
+  inputId?: string | undefined;
+  inputClassName?: string | undefined;
+  inputRef?: RefObject<HTMLInputElement | null> | undefined;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[] | null>(null);
   const [searched, setSearched] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
 
+  // A busca exata pode confirmar o código de barras; na busca ao vivo, o operador escolhe uma sugestão.
   const run = () => {
     if (!query.trim()) return;
     const found = searchProducts(products, query);
     setSearched(true);
     const first = found[0];
-    if (
+    const exactCode =
       found.length === 1 &&
       first &&
-      (first.barcode === query.trim() || first.sku === query.trim())
-    ) {
+      (first.barcode === query.trim() ||
+        first.sku.toLocaleLowerCase("pt-BR") ===
+          query.trim().toLocaleLowerCase("pt-BR"));
+    if (exactCode && first) {
       onSelect(first);
       setQuery("");
       setResults(null);
@@ -49,11 +64,14 @@ export function ProductPicker({
         <div className="relative flex-1">
           <ScanBarcode className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            ref={inputRef}
+            id={inputId}
+            ref={inputRef ?? internalInputRef}
             aria-label="Pesquisar produto"
-            placeholder="Digite o nome, código de barras ou SKU"
-            className="pl-8"
+            placeholder={placeholder}
+            className={["pl-8", inputClassName].filter(Boolean).join(" ")}
             value={query}
+            disabled={disabled}
+            // Atualiza sugestões a cada tecla, sem exigir botão de pesquisa.
             onChange={(e) => {
               const value = e.target.value;
               setQuery(value);
@@ -68,49 +86,63 @@ export function ProductPicker({
             }}
           />
         </div>
-        <Button
-          type="button"
-          className="bg-[#0d3d43] text-white hover:bg-[#14525a]"
-          onClick={run}
-        >
-          <Search /> Buscar
-        </Button>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        A busca atualiza enquanto você digita. Leia o código de barras ou
-        pesquise pelo nome.
-      </p>
-
-      {results !== null && results.length === 0 && allowCreate && searched && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-sm">
-            <PackageX className="size-4 text-muted-foreground" />
-            Produto não encontrado. Deseja cadastrar este produto?
-          </div>
+        {!liveSearch && (
           <Button
             type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onRequestCreate(query)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={run}
+            disabled={disabled}
           >
-            <Plus /> Cadastrar produto
+            <Search /> Buscar
           </Button>
-        </div>
+        )}
+      </div>
+
+      {!liveSearch && (
+        <p className="text-xs text-muted-foreground">
+          A busca atualiza enquanto você digita. Leia o código de barras ou
+          pesquise pelo nome.
+        </p>
       )}
 
+      {/* Quando não há correspondência, oferece o cadastro contextual do item digitado. */}
+      {results !== null &&
+        results.length === 0 &&
+        allowCreate &&
+        (searched || (liveSearch && query.trim().length >= 3)) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-sm">
+              <PackageX className="size-4 text-muted-foreground" />
+              Produto não encontrado. Deseja cadastrar este produto?
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onRequestCreate(query)}
+            >
+              <Plus /> Cadastrar produto
+            </Button>
+          </div>
+        )}
+
       {results !== null && results.length > 0 && (
-        <ul className="max-h-64 divide-y overflow-y-auto rounded-xl border border-[#d7e5e5] bg-white">
+        <ul
+          className="max-h-64 divide-y divide-border overflow-y-auto rounded-xl border border-border bg-card"
+          role="listbox"
+          aria-label="Produtos encontrados"
+        >
           {results.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-[#f1f7f7]"
+                role="option"
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-accent"
                 onClick={() => {
                   onSelect(p);
                   setQuery("");
                   setResults(null);
-                  inputRef.current?.focus();
+                  (inputRef ?? internalInputRef).current?.focus();
                 }}
               >
                 <span>
