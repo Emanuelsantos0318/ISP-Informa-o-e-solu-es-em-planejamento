@@ -13,6 +13,10 @@ import {
   Sparkles,
   TrendingUp,
   TriangleAlert,
+  ListOrdered,
+  Layers,
+  Trophy,
+  Table2,
 } from "lucide-react";
 import {
   Bar,
@@ -69,7 +73,7 @@ import {
   PERIOD_PRESETS,
   type PeriodPreset,
 } from "@/lib/datetime";
-import { SERVICE_OPTIONS } from "@/lib/config/services";
+import { EXIT_TYPES, SERVICE_OPTIONS } from "@/lib/config/services";
 import type { Workbook } from "exceljs";
 
 const REPORTS = [
@@ -115,9 +119,49 @@ const REPORTS = [
     description: "Alertas explicáveis derivados dos registros reais.",
     icon: Sparkles,
   },
+  {
+    id: "mov-produto",
+    title: "Movimentações por produto",
+    description: "Entradas e saídas por produto, serviço e destino.",
+    icon: ArrowUpFromLine,
+  },
+  {
+    id: "analitico-mov",
+    title: "Analítico de movimentações",
+    description: "Itens, responsáveis, horários, lotes e classificação.",
+    icon: Table2,
+  },
+  {
+    id: "estoque-categoria",
+    title: "Estoque por categoria",
+    description: "Posição agrupada por categoria e unidade de medida.",
+    icon: Layers,
+  },
+  {
+    id: "geral-estoque",
+    title: "Geral de estoque",
+    description: "Saldos, consumo, níveis e reposição sugerida.",
+    icon: ListOrdered,
+  },
+  {
+    id: "ranking-mov",
+    title: "Ranking de movimentações",
+    description: "Produtos com maior volume por tipo de movimento.",
+    icon: Trophy,
+  },
+  {
+    id: "consolidado",
+    title: "Consolidado de estoque e movimentos",
+    description: "Posição atual e movimentações detalhadas no mesmo arquivo.",
+    icon: FileSpreadsheet,
+  },
 ] as const;
 type ReportId = (typeof REPORTS)[number]["id"];
-type ActiveFilters = ReportFilters & { preset: PeriodPreset };
+type ActiveFilters = ReportFilters & {
+  preset: PeriodPreset;
+  productSearch: string;
+  exitType: string;
+};
 const today = nowInOperationalTz().date;
 const range = getPeriodRange("30d") ?? { from: today, to: today };
 const INITIAL: ActiveFilters = {
@@ -132,6 +176,8 @@ const INITIAL: ActiveFilters = {
   userId: "todos",
   status: "todos",
   unit: "todos",
+  productSearch: "",
+  exitType: "todos",
 };
 const STORAGE_KEY = "isp.central-relatorios.filters";
 const COLORS = ["#173a6b", "#0e7490", "#16a34a", "#e9a23b", "#dc5050"];
@@ -456,8 +502,10 @@ export function ReportsWorkspace({
               suppliers.map((item) => ({ id: item.id, name: item.name })),
               "todos",
             )}{" "}
-            · serviço {filters.service} · responsável {filters.userId} · unidade{" "}
-            {filters.unit} · situação {filters.status}
+            · serviço {filters.service} · tipo de saída {filters.exitType} ·
+            busca {filters.productSearch || "sem filtro"} · responsável{" "}
+            {filters.userId} · unidade {filters.unit} · situação{" "}
+            {filters.status}
           </p>
         </div>
       </div>
@@ -554,6 +602,13 @@ export function ReportsWorkspace({
               label: item.name + " · " + item.sku,
             }))}
           />
+          <Field label="Buscar produto por nome ou código">
+            <Input
+              value={filters.productSearch}
+              placeholder="Nome, SKU ou código de barras"
+              onChange={(event) => update("productSearch", event.target.value)}
+            />
+          </Field>
           <FilterSelect
             label="Marca"
             value={filters.brand}
@@ -584,6 +639,15 @@ export function ReportsWorkspace({
             options={SERVICE_OPTIONS.map((item) => ({
               value: item.code,
               label: operational.serviceLabels[item.code] ?? item.label,
+            }))}
+          />
+          <FilterSelect
+            label="Tipo de saída"
+            value={filters.exitType}
+            onChange={(v) => update("exitType", v)}
+            options={EXIT_TYPES.map((item) => ({
+              value: item.code,
+              label: operational.exitTypeLabels[item.code] ?? item.label,
             }))}
           />
           <FilterSelect
@@ -687,33 +751,40 @@ export function ReportsWorkspace({
             <Overview analytics={analytics} />
           )}
           <section className="print:hidden">
-            <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-              Relatórios por área
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {REPORTS.map((item) => (
-                <Link
-                  key={item.id}
-                  to="/relatorios/$categoria"
-                  params={{ categoria: item.id }}
-                  className="surface group p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="rounded-lg bg-primary-soft p-2 text-primary">
-                      <item.icon className="size-5" />
-                    </span>
-                    <span>
-                      <span className="block font-medium group-hover:text-primary">
-                        {item.title}
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                        {item.description}
-                      </span>
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            {[
+              { title: "Relatórios gerenciais", items: REPORTS.slice(0, 7) },
+              { title: "Relatórios de Planejamento", items: REPORTS.slice(7) },
+            ].map((group) => (
+              <div key={group.title} className="mb-5 last:mb-0">
+                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+                  {group.title}
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.id}
+                      to="/relatorios/$categoria"
+                      params={{ categoria: item.id }}
+                      className="surface group p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="rounded-lg bg-primary-soft p-2 text-primary">
+                          <item.icon className="size-5" />
+                        </span>
+                        <span>
+                          <span className="block font-medium group-hover:text-primary">
+                            {item.title}
+                          </span>
+                          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                            {item.description}
+                          </span>
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
           </section>
           <Methodology />
         </>
@@ -787,6 +858,24 @@ function Detail({
   invoiceLoading: boolean;
   serviceLabels: Record<string, string>;
 }) {
+  if (
+    id === "mov-produto" ||
+    id === "analitico-mov" ||
+    id === "estoque-categoria" ||
+    id === "geral-estoque" ||
+    id === "ranking-mov" ||
+    id === "consolidado"
+  ) {
+    const rows = getPlanningReportRows(id, analytics, serviceLabels);
+    return (
+      <Panel
+        title={REPORTS.find((report) => report.id === id)?.title ?? "Relatório"}
+        description={`${rows.length} registros · período, filtros e exportações aplicados`}
+      >
+        <RecordTable rows={rows} />
+      </Panel>
+    );
+  }
   if (id === "estoque")
     return (
       <div className="grid gap-5">
@@ -1517,6 +1606,172 @@ function DataTable({
   );
 }
 
+function RecordTable({ rows }: { rows: Record<string, string | number>[] }) {
+  const columns = rows.length
+    ? [...new Set(rows.flatMap((row) => Object.keys(row)))]
+    : ["Resultado"];
+  return (
+    <DataTable
+      columns={columns}
+      empty="Nenhum registro corresponde aos filtros selecionados."
+      rows={rows.map((row) => columns.map((column) => row[column] ?? "—"))}
+    />
+  );
+}
+
+/** Converte os relatórios A-F da antiga tela Planejamento em formatos da Central. */
+function getPlanningReportRows(
+  id: ReportId,
+  analytics: NonNullable<ReturnType<typeof calculateReportAnalytics>>,
+  serviceLabels: Record<string, string>,
+): Record<string, string | number>[] {
+  const inventory = analytics.productRows.map((row) => ({
+    Produto: row.product.name,
+    SKU: row.product.sku,
+    Categoria: row.product.categoryName,
+    Unidade: row.product.unit,
+    Saldo: row.product.balance,
+    Mínimo: row.product.minimum,
+    Meta: row.product.target ?? "Não cadastrada",
+    Entradas: row.entries,
+    Saídas: row.exits,
+    PerdasRegistradas: row.losses,
+    ConsumoDiário: row.averageDaily ?? "Histórico insuficiente",
+    CoberturaDias: row.coverage ?? "Sem estimativa",
+    Situação: STOCK_STATUS_LABEL[row.status],
+    ReposiçãoSugerida: row.reorder ?? "Meta não cadastrada",
+  }));
+  if (id === "geral-estoque") return inventory;
+  if (id === "analitico-mov")
+    return movementExportRows(analytics.movementRows, serviceLabels);
+  if (id === "estoque-categoria") {
+    const groups = new Map<
+      string,
+      {
+        category: string;
+        unit: string;
+        count: number;
+        balance: number;
+        minimum: number;
+      }
+    >();
+    for (const row of analytics.productRows) {
+      const key = `${row.product.categoryId ?? ""}:${row.product.unit}`;
+      const group = groups.get(key) ?? {
+        category: row.product.categoryName,
+        unit: row.product.unit,
+        count: 0,
+        balance: 0,
+        minimum: 0,
+      };
+      group.count += 1;
+      group.balance += row.product.balance;
+      group.minimum += row.product.minimum;
+      groups.set(key, group);
+    }
+    return [...groups.values()].map((group) => ({
+      Categoria: group.category,
+      Unidade: group.unit,
+      Produtos: group.count,
+      Saldo: group.balance,
+      EstoqueMínimo: group.minimum,
+    }));
+  }
+  if (id === "consolidado") {
+    const stockRows = inventory.map((row) => ({
+      Seção: "Estoque",
+      DataHora: "—",
+      Tipo: "—",
+      Produto: row.Produto,
+      SKU: row.SKU,
+      Unidade: row.Unidade,
+      Quantidade: row.Saldo,
+      Categoria: row.Categoria,
+      Serviço: "—",
+      Destino: "—",
+      Responsável: "—",
+      Situação: row.Situação,
+      Reposição: row.ReposiçãoSugerida,
+    }));
+    const movementRows = analytics.movementRows.map(({ movement, item }) => ({
+      Seção: "Movimentação",
+      DataHora: formatDateTime(movement.occurredAt),
+      Tipo: movementTypeLabel(movement.type),
+      Produto: item.name,
+      SKU: item.sku,
+      Unidade: item.unit,
+      Quantidade: item.quantity,
+      Categoria:
+        analytics.products.find((product) => product.id === item.productId)
+          ?.categoryName ?? "—",
+      Serviço: movement.service
+        ? (serviceLabels[movement.service] ?? movement.service)
+        : "—",
+      Destino: item.destination ?? "—",
+      Responsável: movement.userName ?? movement.userId.slice(0, 8),
+      Situação: movement.exitType ?? "—",
+      Reposição: "—",
+    }));
+    return [...stockRows, ...movementRows];
+  }
+
+  const totals = new Map<
+    string,
+    {
+      type: string;
+      product: string;
+      sku: string;
+      unit: string;
+      service: string;
+      destination: string;
+      quantity: number;
+    }
+  >();
+  for (const { movement, item } of analytics.movementRows) {
+    const type = movementTypeLabel(movement.type);
+    const service = movement.service
+      ? (serviceLabels[movement.service] ?? movement.service)
+      : (movement.sourceReference ?? "—");
+    const destination = item.destination ?? "—";
+    const grouping =
+      id === "mov-produto" ? `${service}:${destination}` : "ranking";
+    // Inclui a unidade no agrupamento para nunca somar medidas incompatíveis.
+    const key = `${item.productId}:${item.unit}:${type}:${grouping}`;
+    const row = totals.get(key) ?? {
+      type,
+      product: item.name,
+      sku: item.sku,
+      unit: item.unit,
+      service,
+      destination,
+      quantity: 0,
+    };
+    row.quantity += item.quantity;
+    totals.set(key, row);
+  }
+  return [...totals.values()]
+    .sort((a, b) => b.quantity - a.quantity)
+    .map((row) =>
+      id === "mov-produto"
+        ? {
+            Tipo: row.type,
+            Produto: row.product,
+            SKU: row.sku,
+            "Serviço / origem": row.service,
+            Destino: row.destination,
+            Quantidade: row.quantity,
+            Unidade: row.unit,
+          }
+        : {
+            Tipo: row.type,
+            Produto: row.product,
+            SKU: row.sku,
+            Movimentado: row.quantity,
+            Unidade: row.unit,
+          },
+    );
+}
+
 function FilterSelect({
   label,
   value,
@@ -1576,6 +1831,15 @@ function getExportRows(
   }[],
   serviceLabels: Record<string, string>,
 ): Record<string, string | number>[] {
+  if (
+    id === "mov-produto" ||
+    id === "analitico-mov" ||
+    id === "estoque-categoria" ||
+    id === "geral-estoque" ||
+    id === "ranking-mov" ||
+    id === "consolidado"
+  )
+    return getPlanningReportRows(id, analytics, serviceLabels);
   const products = (items: ReportProductRow[]) =>
     items.map((row) => ({
       Código: row.product.sku,

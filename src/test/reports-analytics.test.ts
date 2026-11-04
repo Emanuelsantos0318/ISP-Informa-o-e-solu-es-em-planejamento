@@ -168,4 +168,22 @@ describe("cálculos da Central de Relatórios", () => {
     expect(result.productRows[0]?.coverage).toBeNull();
     expect(result.priorPeriodExits).toBeNull();
   });
+
+  it("filtra produto por nome, SKU ou código e restringe tipo de saída", () => {
+    const scopedSnapshot = {
+      ...snapshot,
+      movements: snapshot.movements.map((movement) =>
+        movement.id === "m2" ? { ...movement, exitType: "paciente" } : movement,
+      ),
+    };
+    const result = calculateReportAnalytics(scopedSnapshot, {
+      ...filters,
+      productSearch: "Copo",
+      exitType: "paciente",
+    });
+
+    expect(result.products.map((product) => product.id)).toEqual(["p-un"]);
+    expect(result.movementRows).toHaveLength(1);
+    expect(result.movementRows[0]?.movement.id).toBe("m2");
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   BarChart2,
   Eye,
@@ -183,18 +183,17 @@ function PlanningPage() {
       ...(key === "from" || key === "to" ? { period: "personalizado" } : {}),
     }));
   const setPeriod = (period: PeriodPreset) => {
-    const range =
-      period === "personalizado"
-        ? null
-        : getPeriodRange(period);
+    const range = period === "personalizado" ? null : getPeriodRange(period);
     setFilters((current) => ({
       ...current,
       period,
       ...(range ?? {}),
     }));
   };
-  const products =
-    snapshot.data?.products.filter((product) => product.active) ?? [];
+  const products = useMemo(
+    () => snapshot.data?.products.filter((product) => product.active) ?? [],
+    [snapshot.data?.products],
+  );
   const filteredProducts = useMemo(
     () =>
       products.filter((product) => {
@@ -246,46 +245,48 @@ function PlanningPage() {
     () => new Set(filteredProducts.map((product) => product.id)),
     [filteredProducts],
   );
-  const movements = useMemo(
-    () => {
-      const productFiltersActive =
-        filters.category !== "todas" ||
-        filters.status !== "todos" ||
-        filters.supplier !== "todos" ||
-        filters.productId !== "todos" ||
-        Boolean(filters.product.trim());
-      return (snapshot.data?.movements ?? []).flatMap((movement) => {
-        const date = nowInOperationalTz(new Date(movement.occurredAt)).date;
-        if (filters.from && date < filters.from) return [];
-        if (filters.to && date > filters.to) return [];
-        if (
-          filters.movementType !== "todos" &&
-          movement.type !== filters.movementType
-        )
-          return [];
-        if (filters.service !== "todos" && movement.service !== filters.service)
-          return [];
-        if (
-          filters.exitType !== "todos" &&
-          movement.exitType !== filters.exitType
-        )
-          return [];
-        if (filters.user !== "todos" && movement.userId !== filters.user)
-          return [];
-        const q = filters.product.trim().toLocaleLowerCase("pt-BR");
-        const items = productFiltersActive
-          ? movement.items.filter((item) => {
-              if (!allowedProductIds.has(item.productId)) return false;
-              if (q && !`${item.name} ${item.sku}`.toLocaleLowerCase("pt-BR").includes(q))
-                return false;
-              return true;
-            })
-          : movement.items;
-        return items.length ? [{ ...movement, items, itemCount: items.length }] : [];
-      });
-    },
-    [snapshot.data?.movements, filters, allowedProductIds],
-  );
+  const movements = useMemo(() => {
+    const productFiltersActive =
+      filters.category !== "todas" ||
+      filters.status !== "todos" ||
+      filters.supplier !== "todos" ||
+      filters.productId !== "todos" ||
+      Boolean(filters.product.trim());
+    return (snapshot.data?.movements ?? []).flatMap((movement) => {
+      const date = nowInOperationalTz(new Date(movement.occurredAt)).date;
+      if (filters.from && date < filters.from) return [];
+      if (filters.to && date > filters.to) return [];
+      if (
+        filters.movementType !== "todos" &&
+        movement.type !== filters.movementType
+      )
+        return [];
+      if (filters.service !== "todos" && movement.service !== filters.service)
+        return [];
+      if (
+        filters.exitType !== "todos" &&
+        movement.exitType !== filters.exitType
+      )
+        return [];
+      if (filters.user !== "todos" && movement.userId !== filters.user)
+        return [];
+      const q = filters.product.trim().toLocaleLowerCase("pt-BR");
+      const items = productFiltersActive
+        ? movement.items.filter((item) => {
+            if (!allowedProductIds.has(item.productId)) return false;
+            if (
+              q &&
+              !`${item.name} ${item.sku}`.toLocaleLowerCase("pt-BR").includes(q)
+            )
+              return false;
+            return true;
+          })
+        : movement.items;
+      return items.length
+        ? [{ ...movement, items, itemCount: items.length }]
+        : [];
+    });
+  }, [snapshot.data?.movements, filters, allowedProductIds]);
   const reorderRows = useMemo(
     () =>
       filteredProducts.map((product) => {
@@ -360,13 +361,13 @@ function PlanningPage() {
   const filterSummary = [
     `Período: ${formatFilterPeriod(filters, defaultFilters)}`,
     `Movimentação: ${movementTypeLabel(filters.movementType)}`,
-    `Serviço: ${filters.service === "todos" ? "Todos" : operational.serviceLabels[filters.service] ?? SERVICE_OPTIONS.find((item) => item.code === filters.service)?.label ?? filters.service}`,
-    `Categoria: ${filters.category === "todas" ? "Todas" : categories.find((item) => item.id === filters.category)?.label ?? "Categoria selecionada"}`,
-    `Produto: ${filters.productId === "todos" ? (filters.product || "Todos") : products.find((item) => item.id === filters.productId)?.name ?? "Produto selecionado"}`,
-    `Tipo de saída: ${filters.exitType === "todos" ? "Todos" : operational.exitTypeLabels[filters.exitType] ?? EXIT_TYPES.find((item) => item.code === filters.exitType)?.label ?? filters.exitType}`,
-    `Responsável: ${filters.user === "todos" ? "Todos" : users.find(([id]) => id === filters.user)?.[1] ?? "Responsável selecionado"}`,
+    `Serviço: ${filters.service === "todos" ? "Todos" : (operational.serviceLabels[filters.service] ?? SERVICE_OPTIONS.find((item) => item.code === filters.service)?.label ?? filters.service)}`,
+    `Categoria: ${filters.category === "todas" ? "Todas" : (categories.find((item) => item.id === filters.category)?.label ?? "Categoria selecionada")}`,
+    `Produto: ${filters.productId === "todos" ? filters.product || "Todos" : (products.find((item) => item.id === filters.productId)?.name ?? "Produto selecionado")}`,
+    `Tipo de saída: ${filters.exitType === "todos" ? "Todos" : (operational.exitTypeLabels[filters.exitType] ?? EXIT_TYPES.find((item) => item.code === filters.exitType)?.label ?? filters.exitType)}`,
+    `Responsável: ${filters.user === "todos" ? "Todos" : (users.find(([id]) => id === filters.user)?.[1] ?? "Responsável selecionado")}`,
     `Situação do estoque: ${filters.status === "todos" ? "Todas" : STOCK_STATUS_LABEL[filters.status as StockStatus]}`,
-    `Fornecedor: ${filters.supplier === "todos" ? "Todos" : suppliers.find((item) => item.id === filters.supplier)?.name ?? "Fornecedor selecionado"}`,
+    `Fornecedor: ${filters.supplier === "todos" ? "Todos" : (suppliers.find((item) => item.id === filters.supplier)?.name ?? "Fornecedor selecionado")}`,
   ];
   const reportRows = buildReportRows(
     report,
@@ -445,9 +446,16 @@ function PlanningPage() {
       if (reportRows.length) {
         worksheet.autoFilter = {
           from: { row: headerRowIndex, column: 1 },
-          to: { row: headerRowIndex, column: Object.keys(reportRows[0] ?? {}).length },
+          to: {
+            row: headerRowIndex,
+            column: Object.keys(reportRows[0] ?? {}).length,
+          },
         };
-        for (let rowNumber = headerRowIndex + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
+        for (
+          let rowNumber = headerRowIndex + 1;
+          rowNumber <= worksheet.rowCount;
+          rowNumber++
+        ) {
           const row = worksheet.getRow(rowNumber);
           row.alignment = { vertical: "middle", wrapText: true };
           if (rowNumber % 2 === 0)
@@ -522,7 +530,9 @@ function PlanningPage() {
               value={filters.period}
               onValueChange={(value) => setPeriod(value as PeriodPreset)}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {PERIOD_PRESETS.map((preset) => (
                   <SelectItem key={preset.value} value={preset.value}>
@@ -732,163 +742,21 @@ function PlanningPage() {
         )}
       </Panel>
       <section>
-        <div className="mb-3">
-          <h3 className="text-base font-semibold">Relatórios</h3>
-          <p className="text-sm text-muted-foreground">
-            Selecione um relatório para visualizar e exportar os mesmos
-            resultados filtrados.
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {REPORTS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={report === item.key}
-              onClick={() => setReport(item.key)}
-              className={`surface flex items-start gap-3 p-4 text-left transition ${report === item.key ? "border-primary bg-primary-soft/40 ring-2 ring-primary/30 shadow-raised" : "hover:border-primary/50 hover:bg-muted/30"}`}
-            >
-              <span className="flex size-9 items-center justify-center rounded-md bg-primary-soft text-primary">
-                <item.icon className="size-4.5" />
-              </span>
-              <span>
-                <strong className="block text-sm">
-                  {item.key}. {item.title}
-                </strong>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {item.description}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
         <Panel
-          title={`Prévia: ${REPORTS.find((item) => item.key === report)?.title ?? "Relatório"}`}
-          description={`${reportRows.length} registros · filtros aplicados`}
+          title="Relatórios centralizados"
+          description="Todos os relatórios, filtros, prévias e exportações agora ficam em um único lugar."
           actions={
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  document
-                    .getElementById("report-preview")
-                    ?.scrollIntoView({ behavior: "smooth" })
-                }
-              >
-                <Eye /> Visualizar
-              </Button>
-              <Button size="sm" variant="outline" onClick={exportPdf}>
-                <FileText /> PDF
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => void exportExcel()}
-                disabled={exporting}
-              >
-                <FileSpreadsheet /> {exporting ? "Gerando…" : "Excel .xlsx"}
-              </Button>
-            </>
+            <Link to="/relatorios">
+              <Button>Ir para a Central de Relatórios</Button>
+            </Link>
           }
         >
-          {exportMessage && (
-            <p role="status" className="mb-3 text-sm text-success">
-              {exportMessage}
-            </p>
-          )}
-          {exportError && (
-            <p role="alert" className="mb-3 text-sm text-destructive">
-              {exportError}
-            </p>
-          )}
-          <div
-            id="report-preview"
-            className="overflow-x-auto print:overflow-visible"
-          >
-            <div className="mb-4 rounded-lg border bg-muted/20 p-4 print:border-0 print:p-0">
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                    ISP · Relatório de planejamento
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold">
-                    {REPORTS.find((item) => item.key === report)?.title}
-                  </h2>
-                </div>
-                <div className="text-right text-xs text-muted-foreground">
-                  <p>Unidade: {scope.units.find((unit) => unit.id === scope.unitId)?.name ?? "Não selecionada"}</p>
-                  <p>Emitido em {formatDateTime(new Date())}</p>
-                </div>
-              </div>
-              <div className="grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-3 print:grid-cols-3">
-                {filterSummary.map((filter) => (
-                  <p key={filter}>{filter}</p>
-                ))}
-              </div>
-              {report === "C" && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Este relatório apresenta o saldo atual; período e tipo de movimento filtram apenas os relatórios de movimentação.
-                </p>
-              )}
-            </div>
-            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
-              <ReportMetric
-                label="Linhas no relatório"
-                value={reportRows.length}
-                detail="Registros incluídos nos filtros"
-                tone="primary"
-              />
-              <ReportMetric
-                label="Itens de entrada"
-                value={entryItemCount}
-                detail="Linhas recebidas no período"
-                tone="success"
-              />
-              <ReportMetric
-                label="Itens de saída"
-                value={exitItemCount}
-                detail="Linhas baixadas no período"
-                tone="warning"
-              />
-              <ReportMetric
-                label="Produtos para atenção"
-                value={attentionProductCount}
-                detail="Sem saldo, crítico ou abaixo do mínimo"
-                tone="danger"
-              />
-            </div>
-            <div className="max-h-[60vh] overflow-auto print:max-h-none print:overflow-visible">
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="sticky top-0 bg-primary text-xs text-primary-foreground">
-                <tr>
-                  {Object.keys(reportRows[0] ?? { Resultado: "" }).map(
-                    (key) => (
-                      <th key={key} className="px-3 py-2 font-medium">
-                        {key}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/70">
-              {reportRows.map((row, index) => (
-                  <tr key={index} className="transition-colors odd:bg-muted/20 hover:bg-primary-soft/30">
-                    {Object.values(row).map((value, column) => (
-                      <td key={column} className="px-3 py-2">
-                        {String(value)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-            {!reportRows.length && (
-              <p className="p-6 text-center text-sm text-muted-foreground">
-                Nenhum registro encontrado para os filtros atuais.
-              </p>
-            )}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Os relatórios de movimentações por produto, analítico, estoque por
+            categoria, geral de estoque, ranking e consolidado estão disponíveis
+            na Central. A análise de consumo e reposição desta página permanece
+            para o planejamento operacional.
+          </p>
         </Panel>
       </section>
     </div>
@@ -946,7 +814,7 @@ function buildReportRows(
       for (const item of movement.items) {
         const service = movement.service
           ? (serviceLabels[movement.service] ?? movement.service)
-          : movement.sourceReference ?? "—";
+          : (movement.sourceReference ?? "—");
         const destination = item.destination ?? "—";
         const type = typeLabel(movement.type);
         const key = `${item.productId}:${type}:${report === "A" ? `${service}:${destination}` : "ranking"}`;
@@ -1139,7 +1007,10 @@ function formatFilterPeriod(
   defaults: { from: string; to: string },
 ) {
   if (filters.period !== "personalizado")
-    return PERIOD_PRESETS.find((preset) => preset.value === filters.period)?.label ?? "Período";
+    return (
+      PERIOD_PRESETS.find((preset) => preset.value === filters.period)?.label ??
+      "Período"
+    );
   const from = filters.from || defaults.from;
   const to = filters.to || defaults.to;
   return `${from ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${from}T12:00:00Z`)) : "—"} a ${to ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${to}T12:00:00Z`)) : "—"}`;

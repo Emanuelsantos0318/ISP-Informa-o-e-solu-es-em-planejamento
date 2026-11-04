@@ -30,6 +30,9 @@ export type ReportFilters = {
   userId: string;
   status: string;
   unit: string;
+  /** Filtros da análise antiga de Planejamento, agora unificada na Central. */
+  productSearch?: string | undefined;
+  exitType?: string | undefined;
 };
 
 export type ReportProductRow = {
@@ -127,6 +130,14 @@ export function calculateReportAnalytics(
       return false;
     if (filters.productId !== "todos" && product.id !== filters.productId)
       return false;
+    const search = filters.productSearch?.trim().toLocaleLowerCase("pt-BR");
+    if (
+      search &&
+      !`${product.name} ${product.sku} ${product.barcode ?? ""}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(search)
+    )
+      return false;
     if (filters.brand !== "todos" && product.brand !== filters.brand)
       return false;
     if (
@@ -154,6 +165,12 @@ export function calculateReportAnalytics(
     )
       return [];
     if (filters.service !== "todos" && movement.service !== filters.service)
+      return [];
+    if (
+      filters.exitType &&
+      filters.exitType !== "todos" &&
+      movement.exitType !== filters.exitType
+    )
       return [];
     if (filters.userId !== "todos" && movement.userId !== filters.userId)
       return [];
@@ -274,6 +291,9 @@ export function calculateReportAnalytics(
             date <= comparison.to &&
             (filters.service === "todos" ||
               movement.service === filters.service) &&
+            (!filters.exitType ||
+              filters.exitType === "todos" ||
+              movement.exitType === filters.exitType) &&
             (filters.userId === "todos" || movement.userId === filters.userId)
           );
         })

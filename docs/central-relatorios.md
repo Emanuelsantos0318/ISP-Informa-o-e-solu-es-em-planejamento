@@ -24,4 +24,4 @@ O relatório usa a unidade histórica do payload quando foi salva. Movimentos an
 
 ## Uso
 
-Abra **Relatórios gerenciais → Central de relatórios**, escolha uma das sete áreas e combine período, tipo de movimento, categoria, produto, marca, fornecedor, serviço, responsável, situação e unidade de medida. A opção **Imprimir / PDF** usa a impressão do navegador. A opção **Exportar Excel** gera uma planilha `.xlsx` com os filtros registrados; posição do estoque também gera abas separadas para lotes e movimentos.
+Abra **Relatórios gerenciais → Central de relatórios**, escolha uma área ou formato e combine período, tipo de movimento, tipo de saída, categoria, produto, busca por nome/SKU/código de barras, marca, fornecedor, serviço, responsável, situação e unidade de medida. A Central reúne também os seis formatos que antes eram emitidos em Planejamento: movimentações por produto, analítico de movimentações, estoque por categoria, geral de estoque, ranking e consolidado. A opção **Imprimir / PDF** usa a impressão do navegador. A opção **Exportar Excel** gera uma planilha `.xlsx` com os mesmos registros e filtros da prévia.
