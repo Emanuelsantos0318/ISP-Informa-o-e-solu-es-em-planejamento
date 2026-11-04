@@ -57,17 +57,20 @@ import { createUuid } from "@/lib/uuid";
 import { toast } from "sonner";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
 import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-settings";
+import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 
 export function ExitDialog({
   open,
   onOpenChange,
   initialProduct,
   simplified = false,
+  draftKey,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   initialProduct?: Product | undefined;
   simplified?: boolean | undefined;
+  draftKey?: string | undefined;
 }) {
   const catalog = useCatalog();
   const { unitId } = useOperationalScope();
@@ -95,6 +98,7 @@ export function ExitDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [prefill, setPrefill] = useState<ProductPrefill>({});
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   // Fresh form each time the modal is opened.
   useEffect(() => {
@@ -117,7 +121,73 @@ export function ExitDialog({
     setErrors([]);
     setIdempotencyKey(null);
     setSubmitError(null);
-  }, [open, initialProduct]);
+    const saved = draftKey
+      ? readSessionDraft<{
+          date?: string;
+          time?: string;
+          exitType?: ExitTypeCode | "";
+          selection?: ServiceSelection;
+          items?: MovementItemDraft[];
+          selected?: Product | null;
+          notes?: string;
+          destination?: string;
+          recipient?: string;
+          idempotencyKey?: string | null;
+        }>(draftKey)
+      : null;
+    if (saved) {
+      if (saved.date !== undefined) setDate(saved.date);
+      if (saved.time !== undefined) setTime(saved.time);
+      if (saved.exitType !== undefined) setExitType(saved.exitType);
+      if (saved.selection !== undefined) setSelection(saved.selection);
+      if (saved.items !== undefined) setItems(saved.items);
+      if (saved.selected !== undefined) setSelected(saved.selected);
+      if (saved.notes !== undefined) setNotes(saved.notes);
+      if (saved.destination !== undefined) setDestination(saved.destination);
+      if (saved.recipient !== undefined) setRecipient(saved.recipient);
+      if (saved.idempotencyKey !== undefined)
+        setIdempotencyKey(saved.idempotencyKey);
+    }
+    setDraftHydrated(true);
+  }, [open, initialProduct, draftKey]);
+
+  useEffect(() => {
+    if (!open || !draftHydrated || !draftKey) return;
+    writeSessionDraft(draftKey, {
+      date,
+      time,
+      exitType,
+      selection,
+      items,
+      selected,
+      notes,
+      destination,
+      recipient,
+      idempotencyKey,
+    });
+  }, [
+    date,
+    destination,
+    draftHydrated,
+    draftKey,
+    exitType,
+    idempotencyKey,
+    items,
+    notes,
+    open,
+    recipient,
+    selected,
+    selection,
+    time,
+  ]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setDraftHydrated(false);
+      if (draftKey) clearSessionDraft(draftKey);
+    }
+    onOpenChange(next);
+  };
 
   useEffect(() => {
     if (!open || !time) return;
@@ -215,7 +285,7 @@ export function ExitDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

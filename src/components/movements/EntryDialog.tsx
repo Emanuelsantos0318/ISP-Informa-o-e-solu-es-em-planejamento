@@ -43,15 +43,18 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { unitShort } from "@/lib/config/units";
 import { toast } from "sonner";
+import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 
 export function EntryDialog({
   open,
   onOpenChange,
   initialProduct,
+  draftKey,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   initialProduct?: Product | undefined;
+  draftKey?: string | undefined;
 }) {
   const catalog = useCatalog();
   const { unitId } = useOperationalScope();
@@ -76,6 +79,7 @@ export function EntryDialog({
     useState<ImportedPurchaseOrder | null>(null);
   const [purchaseOrderReceiptConfirmed, setPurchaseOrderReceiptConfirmed] =
     useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -96,7 +100,79 @@ export function EntryDialog({
     setPurchaseOrder(null);
     setPurchaseOrderReceiptConfirmed(false);
     setPurchaseOrderOpen(false);
-  }, [open, initialProduct]);
+    const saved = draftKey
+      ? readSessionDraft<{
+          date?: string;
+          time?: string;
+          supplierId?: string;
+          origin?: string;
+          items?: MovementItemDraft[];
+          selected?: Product | null;
+          notes?: string;
+          invoice?: ImportedInvoice | null;
+          invoiceHasMappedLines?: boolean;
+          purchaseOrder?: ImportedPurchaseOrder | null;
+          purchaseOrderReceiptConfirmed?: boolean;
+        }>(draftKey)
+      : null;
+    if (saved) {
+      if (saved.date !== undefined) setDate(saved.date);
+      if (saved.time !== undefined) setTime(saved.time);
+      if (saved.supplierId !== undefined) setSupplierId(saved.supplierId);
+      if (saved.origin !== undefined) setOrigin(saved.origin);
+      if (saved.items !== undefined) setItems(saved.items);
+      if (saved.selected !== undefined) setSelected(saved.selected);
+      if (saved.notes !== undefined) setNotes(saved.notes);
+      if (saved.invoice !== undefined) setInvoice(saved.invoice);
+      if (saved.invoiceHasMappedLines !== undefined)
+        setInvoiceHasMappedLines(saved.invoiceHasMappedLines);
+      if (saved.purchaseOrder !== undefined)
+        setPurchaseOrder(saved.purchaseOrder);
+      if (saved.purchaseOrderReceiptConfirmed !== undefined)
+        setPurchaseOrderReceiptConfirmed(saved.purchaseOrderReceiptConfirmed);
+    }
+    setDraftHydrated(true);
+  }, [open, initialProduct, draftKey]);
+
+  useEffect(() => {
+    if (!open || !draftHydrated || !draftKey) return;
+    writeSessionDraft(draftKey, {
+      date,
+      time,
+      supplierId,
+      origin,
+      items,
+      selected,
+      notes,
+      invoice,
+      invoiceHasMappedLines,
+      purchaseOrder,
+      purchaseOrderReceiptConfirmed,
+    });
+  }, [
+    date,
+    draftHydrated,
+    draftKey,
+    invoice,
+    invoiceHasMappedLines,
+    items,
+    notes,
+    open,
+    origin,
+    purchaseOrder,
+    purchaseOrderReceiptConfirmed,
+    selected,
+    supplierId,
+    time,
+  ]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setDraftHydrated(false);
+      if (draftKey) clearSessionDraft(draftKey);
+    }
+    onOpenChange(next);
+  };
 
   const confirm = async () => {
     const errs: string[] = [];
@@ -167,7 +243,7 @@ export function EntryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

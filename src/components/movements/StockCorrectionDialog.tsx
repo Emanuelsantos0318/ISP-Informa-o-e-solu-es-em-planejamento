@@ -30,14 +30,17 @@ import type { MovementItemDraft, Product } from "@/lib/types";
 import { ProductPicker } from "./ProductPicker";
 import { SelectedProductRow } from "./SelectedProductRow";
 import { ItemsList } from "./ItemsList";
+import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 
 type CorrectionType = "adjustment" | "loss";
 export function StockCorrectionDialog({
   open,
   onOpenChange,
+  draftKey,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  draftKey?: string | undefined;
 }) {
   const { profile } = useAuth();
   const { unitId } = useOperationalScope();
@@ -58,6 +61,8 @@ export function StockCorrectionDialog({
   const [items, setItems] = useState<MovementItemDraft[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -70,7 +75,54 @@ export function StockCorrectionDialog({
     setItems([]);
     setSelected(null);
     setError(null);
-  }, [open]);
+    setIdempotencyKey(null);
+    const saved = draftKey
+      ? readSessionDraft<{
+          type?: CorrectionType;
+          direction?: "increase" | "decrease";
+          date?: string;
+          time?: string;
+          note?: string;
+          items?: MovementItemDraft[];
+          selected?: Product | null;
+          idempotencyKey?: string | null;
+        }>(draftKey)
+      : null;
+    if (saved) {
+      if (saved.type !== undefined) setType(saved.type);
+      if (saved.direction !== undefined) setDirection(saved.direction);
+      if (saved.date !== undefined) setDate(saved.date);
+      if (saved.time !== undefined) setTime(saved.time);
+      if (saved.note !== undefined) setNote(saved.note);
+      if (saved.items !== undefined) setItems(saved.items);
+      if (saved.selected !== undefined) setSelected(saved.selected);
+      if (saved.idempotencyKey !== undefined)
+        setIdempotencyKey(saved.idempotencyKey);
+    }
+    setDraftHydrated(true);
+  }, [open, draftKey]);
+
+  useEffect(() => {
+    if (!open || !draftHydrated || !draftKey) return;
+    writeSessionDraft(draftKey, {
+      type,
+      direction,
+      date,
+      time,
+      note,
+      items,
+      selected,
+      idempotencyKey,
+    });
+  }, [date, direction, draftHydrated, draftKey, idempotencyKey, items, note, open, selected, time, type]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setDraftHydrated(false);
+      if (draftKey) clearSessionDraft(draftKey);
+    }
+    onOpenChange(next);
+  };
 
   const confirm = async () => {
     if (!canManage) {
@@ -86,11 +138,13 @@ export function StockCorrectionDialog({
     }
     setError(null);
     try {
+      const requestKey = idempotencyKey ?? createUuid();
+      setIdempotencyKey(requestKey);
       await movement.mutateAsync({
         unitId,
         movementType: type,
         operationalAt,
-        idempotencyKey: createUuid(),
+        idempotencyKey: requestKey,
         note,
         items: items.map((item) => ({
           productId: item.product.id,
@@ -106,7 +160,8 @@ export function StockCorrectionDialog({
           adjustmentDirection: type === "adjustment" ? direction : null,
         })),
       });
-      onOpenChange(false);
+      setIdempotencyKey(null);
+      handleOpenChange(false);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -119,7 +174,7 @@ export function StockCorrectionDialog({
   const selectedMode =
     type === "loss" ? "perda" : entryLike ? "ajuste" : "saida";
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
