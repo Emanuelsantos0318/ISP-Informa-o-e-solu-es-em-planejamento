@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   BarChart2,
@@ -72,6 +72,7 @@ const initial = {
   status: "todos",
   supplier: "todos",
 };
+const PLANNING_PREFERENCES_KEY = "isp.planejamento.preferences";
 const REPORTS = [
   {
     key: "A",
@@ -123,6 +124,8 @@ function PlanningPage() {
     to: defaultRange?.to ?? "",
   };
   const [filters, setFilters] = useState(defaultFilters);
+  const [report, setReport] = useState<ReportKey>("D");
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const snapshot = useInventorySnapshot({
     from: filtersToBoundary(filters.from, false),
     to: filtersToBoundary(filters.to, true),
@@ -131,10 +134,41 @@ function PlanningPage() {
   const operationalQuery = useOperationalSettings();
   const settings = settingsQuery.data ?? DEFAULT_STOCK_SETTINGS;
   const operational = operationalQuery.data ?? DEFAULT_OPERATIONAL_SETTINGS;
-  const [report, setReport] = useState<ReportKey>("D");
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Restaura filtros e relatório usados por último após recarregar ou voltar.
+    try {
+      const raw = window.localStorage.getItem(PLANNING_PREFERENCES_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          filters?: Partial<typeof initial>;
+          report?: ReportKey;
+        };
+        if (saved.filters && typeof saved.filters === "object")
+          setFilters((current) => ({ ...current, ...saved.filters }));
+        if (saved.report && REPORTS.some((item) => item.key === saved.report))
+          setReport(saved.report);
+      }
+    } catch {
+      // O planejamento continua disponível se o armazenamento estiver bloqueado.
+    }
+    setPreferencesLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    try {
+      window.localStorage.setItem(
+        PLANNING_PREFERENCES_KEY,
+        JSON.stringify({ filters, report }),
+      );
+    } catch {
+      // Os filtros continuam ativos até sair da tela.
+    }
+  }, [filters, report, preferencesLoaded]);
   const dirty = JSON.stringify(filters) !== JSON.stringify(defaultFilters);
   const set = (key: keyof typeof initial) => (value: string) =>
     setFilters((current) => ({ ...current, [key]: value }));

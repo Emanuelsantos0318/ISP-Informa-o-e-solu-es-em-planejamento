@@ -85,6 +85,7 @@ type ExitRow = {
 };
 
 const EMPTY_PRODUCTS: Product[] = [];
+const EXIT_TAB_KEY = "isp.saida.tab";
 
 function datePart(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -117,6 +118,7 @@ function OperatorExitPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(null);
   const [activeTab, setActiveTab] = useState("registrar");
+  const [tabPreferenceLoaded, setTabPreferenceLoaded] = useState(false);
   const [destination, setDestination] = useState<ExitDestinationCode | "">("");
   const [recipient, setRecipient] = useState("");
   const [exitType, setExitType] = useState<ExitTypeCode>("programada_padrao");
@@ -127,6 +129,27 @@ function OperatorExitPage() {
   const [historySearch, setHistorySearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [historyLimit, setHistoryLimit] = useState(50);
+
+  useEffect(() => {
+    // Restaura a última seção de saídas aberta ao voltar para esta rota.
+    try {
+      const saved = window.localStorage.getItem(EXIT_TAB_KEY);
+      if (saved === "registrar" || saved === "historico" || saved === "produtos")
+        setActiveTab(saved);
+    } catch {
+      // A página continua utilizável se o navegador bloquear o armazenamento.
+    }
+    setTabPreferenceLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tabPreferenceLoaded) return;
+    try {
+      window.localStorage.setItem(EXIT_TAB_KEY, activeTab);
+    } catch {
+      // A seleção permanece ativa até o usuário sair desta tela.
+    }
+  }, [activeTab, tabPreferenceLoaded]);
 
   const products = catalog.products.data ?? EMPTY_PRODUCTS;
   const productById = useMemo(

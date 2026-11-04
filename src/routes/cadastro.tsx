@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -65,9 +65,11 @@ export const Route = createFileRoute("/cadastro")({
 });
 
 type Section = "produtos" | "categorias" | "fornecedores";
+const CADASTRO_TAB_KEY = "isp.cadastro.tab";
 
 function CadastroPage() {
   const [tab, setTab] = useState<Section>("produtos");
+  const [tabPreferenceLoaded, setTabPreferenceLoaded] = useState(false);
   const [open, setOpen] = useState<Section | null>(null);
   const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(
     null,
@@ -86,6 +88,31 @@ function CadastroPage() {
   const canCreateSuppliers = canManageCatalog || profile?.role === "operator";
   const canMoveStock = canEditProducts;
   const catalog = useCatalog({ includeInactiveProducts: true });
+
+  useEffect(() => {
+    // Restaura a última seção de cadastro aberta ao voltar para esta rota.
+    try {
+      const saved = window.localStorage.getItem(CADASTRO_TAB_KEY);
+      if (
+        saved === "produtos" ||
+        saved === "categorias" ||
+        saved === "fornecedores"
+      )
+        setTab(saved);
+    } catch {
+      // A página continua utilizável se o navegador bloquear o armazenamento.
+    }
+    setTabPreferenceLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tabPreferenceLoaded) return;
+    try {
+      window.localStorage.setItem(CADASTRO_TAB_KEY, tab);
+    } catch {
+      // A seleção permanece ativa até o usuário sair desta tela.
+    }
+  }, [tab, tabPreferenceLoaded]);
   const productRows = (catalog.products.data ?? []).map((product) => ({
     id: product.id,
     active: product.status === "active",
