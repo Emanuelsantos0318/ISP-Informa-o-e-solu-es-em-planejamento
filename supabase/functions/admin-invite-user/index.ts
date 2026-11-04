@@ -1,7 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const allowedOrigins = new Set([
+  "https://isp-informa-o-e-solu-es-em-planejamento.emanuelltest.workers.dev",
   "https://infosolutionsplannig.netlify.app",
+  "http://localhost:8080",
   "http://localhost:5173",
   "http://localhost:8081",
   "http://localhost:3000",
