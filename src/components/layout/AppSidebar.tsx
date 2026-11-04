@@ -19,6 +19,7 @@ import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 
 const GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "operacao", label: "Operação" },
+  { id: "relatorios", label: "Relatórios gerenciais" },
   { id: "administracao", label: "Administração" },
 ];
 

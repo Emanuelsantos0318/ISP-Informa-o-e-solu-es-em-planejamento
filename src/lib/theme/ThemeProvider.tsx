@@ -22,7 +22,7 @@ function storedTheme(): Theme | null {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { client, profile, ready } = useAuth();
-  const [theme, setTheme] = useState<Theme>(storedTheme);
+  const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? "light");
   const [preferenceLoaded, setPreferenceLoaded] = useState(false);
 
   useEffect(() => {

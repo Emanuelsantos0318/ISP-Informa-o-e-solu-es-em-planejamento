@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   ClipboardList,
+  FileBarChart2,
   LayoutDashboard,
   LineChart,
   Settings,
@@ -17,13 +18,14 @@ export type NavItem = {
     | "/saida"
     | "/cadastro"
     | "/planejamento"
+    | "/relatorios"
     | "/usuarios"
     | "/notificacoes"
     | "/configuracoes"
     | "/unidades";
   label: string;
   icon: LucideIcon;
-  group: "operacao" | "administracao";
+  group: "operacao" | "relatorios" | "administracao";
   superAdminOnly?: boolean;
   operatorOnly?: boolean;
 };
@@ -56,6 +58,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: LineChart,
     group: "operacao",
   },
+  {
+    to: "/relatorios",
+    label: "Central de relatórios",
+    icon: FileBarChart2,
+    group: "relatorios",
+  },
   { to: "/usuarios", label: "Usuários", icon: Users, group: "administracao" },
   {
     to: "/notificacoes",
@@ -80,5 +88,6 @@ export const NAV_ITEMS: NavItem[] = [
 
 export function titleForPath(pathname: string): string {
   const clean = pathname.replace(/\/+$/, "") || "/";
+  if (clean.startsWith("/relatorios/")) return "Central de relatórios";
   return NAV_ITEMS.find((i) => i.to === clean)?.label ?? "ISP";
 }

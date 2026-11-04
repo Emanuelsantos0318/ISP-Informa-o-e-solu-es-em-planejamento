@@ -104,13 +104,15 @@ export function formatIsoDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-export type PeriodPreset = "hoje" | "7d" | "30d" | "mes" | "personalizado";
+export type PeriodPreset =
+  "hoje" | "7d" | "30d" | "mes" | "ano" | "personalizado";
 
 export const PERIOD_PRESETS: { value: PeriodPreset; label: string }[] = [
   { value: "hoje", label: "Hoje" },
   { value: "7d", label: "Últimos 7 dias" },
   { value: "30d", label: "Últimos 30 dias" },
   { value: "mes", label: "Mês atual" },
+  { value: "ano", label: "Ano atual" },
   { value: "personalizado", label: "Personalizado" },
 ];
 
@@ -136,6 +138,8 @@ export function getPeriodRange(
       return { from: shiftIsoDate(today, -29), to: today };
     case "mes":
       return { from: `${today.slice(0, 7)}-01`, to: today };
+    case "ano":
+      return { from: `${today.slice(0, 4)}-01-01`, to: today };
     case "personalizado":
       if (!custom?.from || !custom?.to || custom.from > custom.to) return null;
       return custom;

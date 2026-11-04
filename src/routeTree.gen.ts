@@ -18,9 +18,11 @@ import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanejamentoRouteImport } from './routes/planejamento'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as UnidadesRouteImport } from './routes/unidades'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
+import { Route as RelatoriosCategoriaRouteImport } from './routes/relatorios.$categoria'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -67,6 +69,11 @@ const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   path: '/redefinir-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SaidaRoute = SaidaRouteImport.update({
   id: '/saida',
   path: '/saida',
@@ -82,6 +89,11 @@ const UsuariosRoute = UsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelatoriosCategoriaRoute = RelatoriosCategoriaRouteImport.update({
+  id: '/$categoria',
+  path: '/$categoria',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -93,9 +105,11 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
+  '/relatorios/$categoria': typeof RelatoriosCategoriaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -107,9 +121,11 @@ export interface FileRoutesByTo {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
+  '/relatorios/$categoria': typeof RelatoriosCategoriaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,9 +138,11 @@ export interface FileRoutesById {
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
   '/unidades': typeof UnidadesRoute
   '/usuarios': typeof UsuariosRoute
+  '/relatorios/$categoria': typeof RelatoriosCategoriaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,9 +156,11 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/relatorios'
     | '/saida'
     | '/unidades'
     | '/usuarios'
+    | '/relatorios/$categoria'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -152,9 +172,11 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/relatorios'
     | '/saida'
     | '/unidades'
     | '/usuarios'
+    | '/relatorios/$categoria'
   id:
     | '__root__'
     | '/'
@@ -166,9 +188,11 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/planejamento'
     | '/redefinir-senha'
+    | '/relatorios'
     | '/saida'
     | '/unidades'
     | '/usuarios'
+    | '/relatorios/$categoria'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -181,6 +205,7 @@ export interface RootRouteChildren {
   PerfilRoute: typeof PerfilRoute
   PlanejamentoRoute: typeof PlanejamentoRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  RelatoriosRoute: typeof RelatoriosRouteWithChildren
   SaidaRoute: typeof SaidaRoute
   UnidadesRoute: typeof UnidadesRoute
   UsuariosRoute: typeof UsuariosRoute
@@ -251,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/saida': {
       id: '/saida'
       path: '/saida'
@@ -272,8 +304,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UsuariosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relatorios/$categoria': {
+      id: '/relatorios/$categoria'
+      path: '/$categoria'
+      fullPath: '/relatorios/$categoria'
+      preLoaderRoute: typeof RelatoriosCategoriaRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
   }
 }
+
+interface RelatoriosRouteChildren {
+  RelatoriosCategoriaRoute: typeof RelatoriosCategoriaRoute
+}
+
+const RelatoriosRouteChildren: RelatoriosRouteChildren = {
+  RelatoriosCategoriaRoute: RelatoriosCategoriaRoute,
+}
+
+const RelatoriosRouteWithChildren = RelatoriosRoute._addFileChildren(
+  RelatoriosRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -285,6 +336,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerfilRoute: PerfilRoute,
   PlanejamentoRoute: PlanejamentoRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
+  RelatoriosRoute: RelatoriosRouteWithChildren,
   SaidaRoute: SaidaRoute,
   UnidadesRoute: UnidadesRoute,
   UsuariosRoute: UsuariosRoute,

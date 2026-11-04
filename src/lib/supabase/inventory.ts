@@ -10,6 +10,7 @@ export type InventoryProduct = {
   name: string;
   sku: string;
   barcode: string | null;
+  brand: string | null;
   unit: UnitCode | string;
   minimum: number;
   target: number | null;
@@ -100,7 +101,7 @@ export async function loadInventorySnapshot(
   const productQuery = client
     .from("products")
     .select(
-      "id, company_id, category_id, preferred_supplier_id, name, sku, barcode, unit_of_measure, minimum_stock, desired_stock, status, categories(name)",
+      "id, company_id, category_id, preferred_supplier_id, name, sku, barcode, brand, unit_of_measure, minimum_stock, desired_stock, status, categories(name)",
     )
     .eq("company_id", companyId)
     .order("name")
@@ -232,6 +233,7 @@ export async function loadInventorySnapshot(
       name: text(row["name"]),
       sku: text(row["sku"]),
       barcode: nullableText(row["barcode"]),
+      brand: nullableText(row["brand"]),
       unit: text(row["unit_of_measure"]),
       minimum: number(row["minimum_stock"]),
       target:
@@ -271,7 +273,10 @@ export async function loadInventorySnapshot(
       productId: text(product["id"]),
       name: text(product["name"]),
       sku: text(product["sku"]),
-      unit: text(product["unit_of_measure"]),
+      unit:
+        text(requestItem["unit"]) ||
+        text(requestItem["unit_of_measure"]) ||
+        text(product["unit_of_measure"]),
       quantity: number(movement["quantity"]),
       lotNumber: lot ? text(lot["lot_number"]) : null,
       expiresOn: lot ? nullableText(lot["expires_on"]) : null,
