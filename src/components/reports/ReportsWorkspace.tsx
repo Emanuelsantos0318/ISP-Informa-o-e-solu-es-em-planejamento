@@ -187,9 +187,15 @@ export function ReportsWorkspace({
 }: {
   category?: string | undefined;
 }) {
-  const id = REPORTS.some((item) => item.id === category)
-    ? (category as ReportId)
-    : null;
+  // Usa o slug da rota quando a página for aberta diretamente, inclusive na impressão.
+  const routeCategory =
+    category ??
+    (typeof window === "undefined"
+      ? undefined
+      : window.location.pathname.split("/").filter(Boolean).slice(-1)[0]);
+  const normalizedCategory = routeCategory?.trim().toLocaleLowerCase("pt-BR");
+  const currentReport = REPORTS.find((item) => item.id === normalizedCategory);
+  const id: ReportId | null = currentReport?.id ?? null;
   const [filters, setFilters] = useState<ActiveFilters>(INITIAL);
   const [preferencesReady, setPreferencesReady] = useState(false);
   useEffect(() => {
@@ -263,7 +269,6 @@ export function ReportsWorkspace({
       ]),
     ).entries(),
   ];
-  const currentReport = id ? REPORTS.find((item) => item.id === id) : null;
   const filteredInvoices = useMemo(() => {
     const batchIds = new Set(
       analytics?.movements
@@ -462,7 +467,10 @@ export function ReportsWorkspace({
   };
 
   return (
-    <div id="report-preview" className="reports-page grid gap-5">
+    <div
+      id="report-preview"
+      className={`reports-page grid gap-5 ${id ? "reports-page--detail" : "reports-page--overview"}`}
+    >
       <div className="hidden items-center gap-3 border-b pb-4 print:flex">
         <img
           src="/isp-logo.png"
@@ -686,54 +694,58 @@ export function ReportsWorkspace({
       {exportError && <BackendNotice>{exportError}</BackendNotice>}
       {snapshotQuery.isSuccess && analytics && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Produtos no recorte"
-              value={analytics.products.length}
-              unit="produtos ativos"
-              icon={Boxes}
-            />
-            <StatCard
-              label="Abaixo do mínimo"
-              value={
-                analytics.stockCounts.sem_saldo +
-                analytics.stockCounts.critico +
-                analytics.stockCounts.baixo
-              }
-              unit="inclui estoque zerado, crítico e baixo"
-              icon={AlertTriangle}
-              tone="warning"
-            />
-            <StatCard
-              label="Entradas do período"
-              value={analytics.entries === null ? null : fmt(analytics.entries)}
-              unit={
-                analytics.unitCompatible
-                  ? "quantidade na unidade filtrada"
-                  : "selecione uma unidade para totalizar"
-              }
-              icon={ArrowDownToLine}
-              tone="success"
-            />
-            <StatCard
-              label="Saídas do período"
-              value={analytics.exits === null ? null : fmt(analytics.exits)}
-              unit={
-                analytics.unitCompatible
-                  ? "quantidade na unidade filtrada"
-                  : "selecione uma unidade para totalizar"
-              }
-              icon={ArrowUpFromLine}
-            />
+          <div className={id ? "reports-print-hide" : undefined}>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                label="Produtos no recorte"
+                value={analytics.products.length}
+                unit="produtos ativos"
+                icon={Boxes}
+              />
+              <StatCard
+                label="Abaixo do mínimo"
+                value={
+                  analytics.stockCounts.sem_saldo +
+                  analytics.stockCounts.critico +
+                  analytics.stockCounts.baixo
+                }
+                unit="inclui estoque zerado, crítico e baixo"
+                icon={AlertTriangle}
+                tone="warning"
+              />
+              <StatCard
+                label="Entradas do período"
+                value={
+                  analytics.entries === null ? null : fmt(analytics.entries)
+                }
+                unit={
+                  analytics.unitCompatible
+                    ? "quantidade na unidade filtrada"
+                    : "selecione uma unidade para totalizar"
+                }
+                icon={ArrowDownToLine}
+                tone="success"
+              />
+              <StatCard
+                label="Saídas do período"
+                value={analytics.exits === null ? null : fmt(analytics.exits)}
+                unit={
+                  analytics.unitCompatible
+                    ? "quantidade na unidade filtrada"
+                    : "selecione uma unidade para totalizar"
+                }
+                icon={ArrowUpFromLine}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A posição é atual; movimentações respeitam o período. Consultas
+              são paginadas para incluir todos os registros retornados pelo
+              banco. Unidades diferentes não são convertidas nem combinadas com
+              fator presumido. Unidades salvas no movimento são preservadas; nos
+              registros antigos sem essa informação, usamos a unidade atual do
+              produto.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            A posição é atual; movimentações respeitam o período. Consultas são
-            paginadas para incluir todos os registros retornados pelo banco.
-            Unidades diferentes não são convertidas nem combinadas com fator
-            presumido. Unidades salvas no movimento são preservadas; nos
-            registros antigos sem essa informação, usamos a unidade atual do
-            produto.
-          </p>
           {filters.from > filters.to && (
             <BackendNotice>
               A data inicial precisa ser anterior ou igual à data final.
@@ -750,7 +762,7 @@ export function ReportsWorkspace({
           ) : (
             <Overview analytics={analytics} />
           )}
-          <section className="print:hidden">
+          <section className="reports-print-hide">
             {[
               { title: "Relatórios gerenciais", items: REPORTS.slice(0, 7) },
               { title: "Relatórios de Planejamento", items: REPORTS.slice(7) },
