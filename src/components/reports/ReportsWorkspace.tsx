@@ -184,7 +184,10 @@ export function ReportsWorkspace({
     to: filters.to ? boundary(filters.to, true) : undefined,
   });
   const catalog = useCatalog();
-  const invoicesQuery = useInvoiceHistory();
+  const invoicesQuery = useInvoiceHistory({
+    from: filters.from,
+    to: filters.to,
+  });
   const settingsQuery = useStockSettings();
   const operationalQuery = useOperationalSettings();
   const scope = useOperationalScope();
@@ -660,10 +663,10 @@ export function ReportsWorkspace({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            A posição é atual; movimentações respeitam o período. Unidades
-            diferentes não são convertidas nem combinadas com fator presumido. O
-            carregador atual limita a consulta a 1.000 linhas por tabela
-            relacionada. Unidades salvas no movimento são preservadas; nos
+            A posição é atual; movimentações respeitam o período. Consultas são
+            paginadas para incluir todos os registros retornados pelo banco.
+            Unidades diferentes não são convertidas nem combinadas com fator
+            presumido. Unidades salvas no movimento são preservadas; nos
             registros antigos sem essa informação, usamos a unidade atual do
             produto.
           </p>
@@ -1430,8 +1433,7 @@ function Methodology() {
           estornos, transferências, fabricação ou aproveitamento de resíduos.
         </li>
         <li>
-          O carregador atual limita as consultas a 1.000 linhas por tabela
-          relacionada; volumes maiores exigem paginação de dados.
+          O relatório pagina as consultas e traz todos os registros do período.
         </li>
       </ul>
     </details>

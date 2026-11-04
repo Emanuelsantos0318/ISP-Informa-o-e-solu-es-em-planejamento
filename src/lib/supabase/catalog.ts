@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UnitCode } from "@/lib/config/units";
 import { UNITS } from "@/lib/config/units";
 import type { Product } from "@/lib/types";
+import { readAllPages } from "./pagination";
 
 export type CategoryRecord = {
   id: string;
@@ -41,26 +42,28 @@ export async function listCategories(
   client: SupabaseClient,
   companyId: string,
 ) {
-  const { data, error } = await client
-    .from("categories")
-    .select("id, company_id, name, description, status")
-    .eq("company_id", companyId)
-    .order("name")
-    .limit(500);
-  if (error) throw error;
+  const data = await readAllPages(
+    client
+      .from("categories")
+      .select("id, company_id, name, description, status")
+      .eq("company_id", companyId)
+      .order("name")
+      .order("id"),
+  );
   return data as CategoryRecord[];
 }
 
 export async function listSuppliers(client: SupabaseClient, companyId: string) {
-  const { data, error } = await client
-    .from("suppliers")
-    .select(
-      "id, company_id, name, cnpj, trade_name, state_registration, address, city, state, postal_code, contact_name, email, phone, notes, status",
-    )
-    .eq("company_id", companyId)
-    .order("name")
-    .limit(500);
-  if (error) throw error;
+  const data = await readAllPages(
+    client
+      .from("suppliers")
+      .select(
+        "id, company_id, name, cnpj, trade_name, state_registration, address, city, state, postal_code, contact_name, email, phone, notes, status",
+      )
+      .eq("company_id", companyId)
+      .order("name")
+      .order("id"),
+  );
   return data as SupplierRecord[];
 }
 
@@ -77,8 +80,7 @@ export async function listProducts(
     )
     .eq("company_id", companyId);
   if (!includeInactive) query = query.eq("status", "active");
-  const { data, error } = await query.order("name").limit(500);
-  if (error) throw error;
+  const data = await readAllPages(query.order("name").order("id"));
   return (data ?? []).map((row: Record<string, unknown>) => {
     const balances = Array.isArray(row["stock_balances"])
       ? (row["stock_balances"] as { quantity: number; unit_id: string }[])

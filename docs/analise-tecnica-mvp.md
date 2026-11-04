@@ -26,9 +26,9 @@ O ISP tem uma arquitetura coerente para o MVP: React/TanStack Start na interface
 
 `supabase/functions/admin-create-user/index.ts` e `admin-invite-user/index.ts` permitem alguns endereços localhost, mas não `http://192.168.2.31:8080`, que é a origem atual do navegador. Chamadas administrativas a partir desse endereço podem ser bloqueadas pelo navegador. Antes de usar criação/convite nessa forma de acesso, incluir explicitamente a origem de desenvolvimento necessária ou usar uma origem local já liberada. Em produção, validar a origem final da Netlify nas duas funções.
 
-### Alta — Consultas têm limites fixos e não paginam
+### Concluído — Paginação das consultas de catálogo e relatórios
 
-`src/lib/supabase/catalog.ts` limita produtos a 500; `src/lib/supabase/inventory.ts` limita saldos, lotes, lotes de movimentação e saídas legadas a 1.000 e itens/perfis a outros limites. Ao ultrapassá-los, a interface pode deixar de mostrar produtos ou parte do histórico sem indicar que a lista foi truncada. Adicionar paginação/cursor ou consultas agregadas antes do volume de produção atingir esses valores.
+Catálogo, saldos, lotes, movimentos, itens associados, perfis e documentos fiscais dos relatórios usam paginação com ordenação estável. Os filtros longos por identificador são divididos em blocos menores para respeitar os limites da API. A tela geral de movimentações continua consultando somente os 100 documentos fiscais mais recentes quando não há período informado.
 
 ### Alta — Backup e recuperação no plano Free
 

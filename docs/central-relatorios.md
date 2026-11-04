@@ -18,7 +18,7 @@ Os relatórios consultam `products`, `categories`, `stock_balances`, `product_lo
 
 O sistema não registra custo unitário por item, método de custeio, valores de estoque por produto, compromissos/reservas, compras pendentes, entregas futuras, prazo de fornecedor, quantidade física contada, responsável e justificativa de inventário, estornos/devoluções estruturados, data de fabricação, localização de lote ou dados de aproveitamento de resíduos. Esses relatórios mostram a limitação e não inventam os valores.
 
-Notas fiscais mostram o total informado no documento, sem rateio em custo de produto. A consulta de documentos fiscais usa o histórico existente de até 100 registros. O carregador de estoque e movimentos limita as tabelas consultadas a até 1.000 registros por conjunto; uma operação com volume maior precisa de paginação no acesso a dados antes de usar os relatórios como extrato integral.
+Notas fiscais mostram o total informado no documento, sem rateio em custo de produto. As consultas do relatório são paginadas, incluindo catálogo, estoque, lotes, movimentos, itens associados, usuários e documentos fiscais dentro do período selecionado. As páginas usam ordenação estável; filtros `in` são divididos em blocos menores para respeitar os limites da API.
 
 O relatório usa a unidade histórica do payload quando foi salva. Movimentos antigos sem unidade registrada herdam a unidade atual do produto; alterações de unidade podem, portanto, limitar a comparabilidade histórica desses registros.
 
