@@ -27,7 +27,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useInventorySnapshot } from "@/lib/supabase/useInventorySnapshot";
 import { useCatalog } from "@/lib/supabase/useCatalog";
-import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useStockSettings } from "@/lib/supabase/useStockSettings";
 import {
   classifyStock,
@@ -42,11 +41,14 @@ import {
   nowInOperationalTz,
   formatDateTime,
   getPeriodRange,
+  PERIOD_PRESETS,
+  type PeriodPreset,
 } from "@/lib/datetime";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
 import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-settings";
 import { EXIT_TYPES, SERVICE_OPTIONS } from "@/lib/config/services";
 import type { MovementBatch, InventoryProduct } from "@/lib/supabase/inventory";
+import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 
 export const Route = createFileRoute("/planejamento")({
   head: () => ({
@@ -62,10 +64,13 @@ export const Route = createFileRoute("/planejamento")({
 });
 
 const initial = {
+  period: "30d" as PeriodPreset,
   from: "",
   to: "",
   category: "todas",
+  productId: "todos",
   product: "",
+  movementType: "todos",
   service: "todos",
   exitType: "todos",
   user: "todos",
@@ -76,8 +81,8 @@ const PLANNING_PREFERENCES_KEY = "isp.planejamento.preferences";
 const REPORTS = [
   {
     key: "A",
-    title: "Consumo",
-    description: "Saídas por produto, serviço e período.",
+    title: "Movimentações por produto",
+    description: "Entradas e saídas por produto, serviço e período.",
     icon: BarChart2,
   },
   {
@@ -88,8 +93,8 @@ const REPORTS = [
   },
   {
     key: "C",
-    title: "Por categoria",
-    description: "Estoque agrupado por categoria e unidade.",
+    title: "Estoque por categoria",
+    description: "Posição atual agrupada por categoria e unidade.",
     icon: Layers,
   },
   {
@@ -100,8 +105,8 @@ const REPORTS = [
   },
   {
     key: "E",
-    title: "Ranking de consumo",
-    description: "Produtos mais consumidos por unidade.",
+    title: "Ranking de movimentações",
+    description: "Produtos com maior volume movimentado no período.",
     icon: Trophy,
   },
   {
@@ -115,11 +120,12 @@ type ReportKey = (typeof REPORTS)[number]["key"];
 type ReportRow = Record<string, string | number>;
 
 function PlanningPage() {
-  const { profile, client } = useAuth();
+  const scope = useOperationalScope();
   const catalog = useCatalog();
   const defaultRange = getPeriodRange("30d");
   const defaultFilters = {
     ...initial,
+    period: "30d" as PeriodPreset,
     from: defaultRange?.from ?? "",
     to: defaultRange?.to ?? "",
   };
@@ -171,7 +177,22 @@ function PlanningPage() {
   }, [filters, report, preferencesLoaded]);
   const dirty = JSON.stringify(filters) !== JSON.stringify(defaultFilters);
   const set = (key: keyof typeof initial) => (value: string) =>
-    setFilters((current) => ({ ...current, [key]: value }));
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === "from" || key === "to" ? { period: "personalizado" } : {}),
+    }));
+  const setPeriod = (period: PeriodPreset) => {
+    const range =
+      period === "personalizado"
+        ? null
+        : getPeriodRange(period);
+    setFilters((current) => ({
+      ...current,
+      period,
+      ...(range ?? {}),
+    }));
+  };
   const products =
     snapshot.data?.products.filter((product) => product.active) ?? [];
   const filteredProducts = useMemo(
@@ -184,6 +205,8 @@ function PlanningPage() {
             .toLocaleLowerCase("pt-BR")
             .includes(q)
         )
+          return false;
+        if (filters.productId !== "todos" && product.id !== filters.productId)
           return false;
         if (
           filters.category !== "todas" &&
@@ -212,47 +235,55 @@ function PlanningPage() {
     [
       products,
       filters.product,
+      filters.productId,
       filters.category,
       filters.supplier,
       filters.status,
       settings,
     ],
   );
-  const allowedProductIds = new Set(
-    filteredProducts.map((product) => product.id),
+  const allowedProductIds = useMemo(
+    () => new Set(filteredProducts.map((product) => product.id)),
+    [filteredProducts],
   );
   const movements = useMemo(
-    () =>
-      (snapshot.data?.movements ?? []).filter((movement) => {
+    () => {
+      const productFiltersActive =
+        filters.category !== "todas" ||
+        filters.status !== "todos" ||
+        filters.supplier !== "todos" ||
+        filters.productId !== "todos" ||
+        Boolean(filters.product.trim());
+      return (snapshot.data?.movements ?? []).flatMap((movement) => {
         const date = nowInOperationalTz(new Date(movement.occurredAt)).date;
-        if (filters.from && date < filters.from) return false;
-        if (filters.to && date > filters.to) return false;
+        if (filters.from && date < filters.from) return [];
+        if (filters.to && date > filters.to) return [];
+        if (
+          filters.movementType !== "todos" &&
+          movement.type !== filters.movementType
+        )
+          return [];
         if (filters.service !== "todos" && movement.service !== filters.service)
-          return false;
+          return [];
         if (
           filters.exitType !== "todos" &&
           movement.exitType !== filters.exitType
         )
-          return false;
+          return [];
         if (filters.user !== "todos" && movement.userId !== filters.user)
-          return false;
-        if (
-          (filters.category !== "todas" ||
-            filters.status !== "todos" ||
-            filters.supplier !== "todos") &&
-          !movement.items.some((item) => allowedProductIds.has(item.productId))
-        )
-          return false;
+          return [];
         const q = filters.product.trim().toLocaleLowerCase("pt-BR");
-        if (
-          q &&
-          !movement.items.some((item) =>
-            `${item.name} ${item.sku}`.toLocaleLowerCase("pt-BR").includes(q),
-          )
-        )
-          return false;
-        return true;
-      }),
+        const items = productFiltersActive
+          ? movement.items.filter((item) => {
+              if (!allowedProductIds.has(item.productId)) return false;
+              if (q && !`${item.name} ${item.sku}`.toLocaleLowerCase("pt-BR").includes(q))
+                return false;
+              return true;
+            })
+          : movement.items;
+        return items.length ? [{ ...movement, items, itemCount: items.length }] : [];
+      });
+    },
     [snapshot.data?.movements, filters, allowedProductIds],
   );
   const reorderRows = useMemo(
@@ -326,6 +357,17 @@ function PlanningPage() {
       ]),
     ).entries(),
   ];
+  const filterSummary = [
+    `Período: ${formatFilterPeriod(filters, defaultFilters)}`,
+    `Movimentação: ${movementTypeLabel(filters.movementType)}`,
+    `Serviço: ${filters.service === "todos" ? "Todos" : operational.serviceLabels[filters.service] ?? SERVICE_OPTIONS.find((item) => item.code === filters.service)?.label ?? filters.service}`,
+    `Categoria: ${filters.category === "todas" ? "Todas" : categories.find((item) => item.id === filters.category)?.label ?? "Categoria selecionada"}`,
+    `Produto: ${filters.productId === "todos" ? (filters.product || "Todos") : products.find((item) => item.id === filters.productId)?.name ?? "Produto selecionado"}`,
+    `Tipo de saída: ${filters.exitType === "todos" ? "Todos" : operational.exitTypeLabels[filters.exitType] ?? EXIT_TYPES.find((item) => item.code === filters.exitType)?.label ?? filters.exitType}`,
+    `Responsável: ${filters.user === "todos" ? "Todos" : users.find(([id]) => id === filters.user)?.[1] ?? "Responsável selecionado"}`,
+    `Situação do estoque: ${filters.status === "todos" ? "Todas" : STOCK_STATUS_LABEL[filters.status as StockStatus]}`,
+    `Fornecedor: ${filters.supplier === "todos" ? "Todos" : suppliers.find((item) => item.id === filters.supplier)?.name ?? "Fornecedor selecionado"}`,
+  ];
   const reportRows = buildReportRows(
     report,
     reorderRows,
@@ -372,17 +414,20 @@ function PlanningPage() {
         `ISP — ${REPORTS.find((item) => item.key === report)?.title ?? "Relatório"}`,
       ]);
       worksheet.addRow([
-        `Unidade: ${profile?.unit_id ?? "Selecionada"}`,
+        `Unidade: ${scope.units.find((unit) => unit.id === scope.unitId)?.name ?? "Selecionada"}`,
         `Gerado em: ${formatDateTime(new Date())}`,
       ]);
+      for (const filter of filterSummary) worksheet.addRow([filter]);
       worksheet.addRow([]);
+      const headerRowIndex = 4 + filterSummary.length;
       if (reportRows.length) {
         worksheet.addRow(Object.keys(reportRows[0] ?? {}));
         for (const row of reportRows) worksheet.addRow(Object.values(row));
       }
       worksheet.getRow(1).font = { bold: true, size: 16 };
       worksheet.getRow(2).font = { color: { argb: "FF526176" }, size: 10 };
-      const headerRow = worksheet.getRow(4);
+      worksheet.getRow(3).font = { bold: true, color: { argb: "FF173A6B" } };
+      const headerRow = worksheet.getRow(headerRowIndex);
       headerRow.height = 24;
       headerRow.eachCell((cell) => {
         cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -396,13 +441,13 @@ function PlanningPage() {
           bottom: { style: "medium", color: { argb: "FF0E7490" } },
         };
       });
-      worksheet.views = [{ state: "frozen", ySplit: 4 }];
+      worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
       if (reportRows.length) {
         worksheet.autoFilter = {
-          from: { row: 4, column: 1 },
-          to: { row: 4, column: Object.keys(reportRows[0] ?? {}).length },
+          from: { row: headerRowIndex, column: 1 },
+          to: { row: headerRowIndex, column: Object.keys(reportRows[0] ?? {}).length },
         };
-        for (let rowNumber = 5; rowNumber <= worksheet.rowCount; rowNumber++) {
+        for (let rowNumber = headerRowIndex + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
           const row = worksheet.getRow(rowNumber);
           row.alignment = { vertical: "middle", wrapText: true };
           if (rowNumber % 2 === 0)
@@ -426,7 +471,7 @@ function PlanningPage() {
         new Blob([bytes], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
-        `isp-relatorio-${report.toLowerCase()}.xlsx`,
+        `isp-relatorio-${report.toLowerCase()}-${nowInOperationalTz().date}.xlsx`,
       );
       setExportMessage("Planilha Excel gerada com os filtros aplicados.");
     } catch {
@@ -458,7 +503,7 @@ function PlanningPage() {
       )}
       <Panel
         title="Filtros de análise"
-        description="Período aplica-se ao consumo e aos movimentos; categoria, status e fornecedor filtram a posição do estoque."
+        description="Combine período, tipo de movimento, serviço, categoria e produto. Os filtros selecionados são aplicados aos resultados e às exportações."
         actions={
           dirty && (
             <Button
@@ -472,6 +517,21 @@ function PlanningPage() {
         }
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+          <Field label="Período">
+            <Select
+              value={filters.period}
+              onValueChange={(value) => setPeriod(value as PeriodPreset)}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PERIOD_PRESETS.map((preset) => (
+                  <SelectItem key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           <Field label="Período inicial">
             <Input
               type="date"
@@ -486,7 +546,17 @@ function PlanningPage() {
               onChange={(event) => set("to")(event.target.value)}
             />
           </Field>
-          <Field label="Produto">
+          <FilterSelect
+            label="Produto específico"
+            value={filters.productId}
+            onChange={set("productId")}
+            options={products.map((product) => ({
+              value: product.id,
+              label: `${product.name} · ${product.sku}`,
+            }))}
+            allLabel="Todos os produtos"
+          />
+          <Field label="Buscar produto">
             <Input
               placeholder="Nome, SKU ou código de barras"
               value={filters.product}
@@ -509,6 +579,18 @@ function PlanningPage() {
               value: item.code,
               label: operational.serviceLabels[item.code] ?? item.label,
             }))}
+          />
+          <FilterSelect
+            label="Movimentação"
+            value={filters.movementType}
+            onChange={set("movementType")}
+            options={[
+              { value: "entry", label: "Somente entradas" },
+              { value: "exit", label: "Somente saídas" },
+              { value: "adjustment", label: "Ajustes" },
+              { value: "loss", label: "Perdas" },
+            ]}
+            allLabel="Todos os movimentos"
           />
           <FilterSelect
             label="Tipo de saída"
@@ -723,6 +805,32 @@ function PlanningPage() {
             id="report-preview"
             className="overflow-x-auto print:overflow-visible"
           >
+            <div className="mb-4 rounded-lg border bg-muted/20 p-4 print:border-0 print:p-0">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    ISP · Relatório de planejamento
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold">
+                    {REPORTS.find((item) => item.key === report)?.title}
+                  </h2>
+                </div>
+                <div className="text-right text-xs text-muted-foreground">
+                  <p>Unidade: {scope.units.find((unit) => unit.id === scope.unitId)?.name ?? "Não selecionada"}</p>
+                  <p>Emitido em {formatDateTime(new Date())}</p>
+                </div>
+              </div>
+              <div className="grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-3 print:grid-cols-3">
+                {filterSummary.map((filter) => (
+                  <p key={filter}>{filter}</p>
+                ))}
+              </div>
+              {report === "C" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Este relatório apresenta o saldo atual; período e tipo de movimento filtram apenas os relatórios de movimentação.
+                </p>
+              )}
+            </div>
             <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
               <ReportMetric
                 label="Linhas no relatório"
@@ -749,6 +857,7 @@ function PlanningPage() {
                 tone="danger"
               />
             </div>
+            <div className="max-h-[60vh] overflow-auto print:max-h-none print:overflow-visible">
             <table className="w-full min-w-[700px] text-left text-sm">
               <thead className="sticky top-0 bg-primary text-xs text-primary-foreground">
                 <tr>
@@ -762,7 +871,7 @@ function PlanningPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
-                {reportRows.slice(0, 100).map((row, index) => (
+              {reportRows.map((row, index) => (
                   <tr key={index} className="transition-colors odd:bg-muted/20 hover:bg-primary-soft/30">
                     {Object.values(row).map((value, column) => (
                       <td key={column} className="px-3 py-2">
@@ -773,12 +882,7 @@ function PlanningPage() {
                 ))}
               </tbody>
             </table>
-            {reportRows.length > 100 && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Prévia limitada a 100 linhas; a exportação inclui todos os
-                resultados.
-              </p>
-            )}
+            </div>
             {!reportRows.length && (
               <p className="p-6 text-center text-sm text-muted-foreground">
                 Nenhum registro encontrado para os filtros atuais.
@@ -829,24 +933,30 @@ function buildReportRows(
     const totals = new Map<
       string,
       {
+        type: string;
         name: string;
         sku: string;
         unit: string;
         service: string;
+        destination: string;
         quantity: number;
       }
     >();
-    for (const movement of movements.filter((row) => row.type === "exit"))
+    for (const movement of movements)
       for (const item of movement.items) {
         const service = movement.service
           ? (serviceLabels[movement.service] ?? movement.service)
-          : "—";
-        const key = `${item.productId}:${report === "A" ? service : "ranking"}`;
+          : movement.sourceReference ?? "—";
+        const destination = item.destination ?? "—";
+        const type = typeLabel(movement.type);
+        const key = `${item.productId}:${type}:${report === "A" ? `${service}:${destination}` : "ranking"}`;
         const row = totals.get(key) ?? {
+          type,
           name: item.name,
           sku: item.sku,
           unit: item.unit,
           service,
+          destination,
           quantity: 0,
         };
         row.quantity += item.quantity;
@@ -857,16 +967,19 @@ function buildReportRows(
       .map((row) =>
         report === "A"
           ? {
+              Tipo: row.type,
               Produto: row.name,
               SKU: row.sku,
-              Serviço: row.service,
+              "Serviço / origem": row.service,
+              Destino: row.destination,
               Quantidade: fmt(row.quantity),
               Unidade: row.unit,
             }
           : {
+              Tipo: row.type,
               Produto: row.name,
               SKU: row.sku,
-              Consumo: fmt(row.quantity),
+              Movimentado: fmt(row.quantity),
               Unidade: row.unit,
             },
       );
@@ -881,10 +994,12 @@ function buildReportRows(
         Quantidade: fmt(item.quantity),
         Unidade: item.unit,
         Lote: item.lotNumber ?? "—",
-        Responsável: movement.userName ?? movement.userId.slice(0, 8),
         Serviço: movement.service
           ? (serviceLabels[movement.service] ?? movement.service)
           : "—",
+        Destino: item.destination ?? "—",
+        Retirado: item.recipient ?? "—",
+        Responsável: movement.userName ?? movement.userId.slice(0, 8),
         Classificação:
           movement.exitType ??
           (item.adjustmentDirection === "increase"
@@ -894,6 +1009,7 @@ function buildReportRows(
               : movement.type === "loss"
                 ? "Perda"
                 : "—"),
+        "Documento / origem": movement.sourceReference ?? "—",
         Observação: movement.note ?? "—",
       })),
     );
@@ -976,8 +1092,12 @@ function buildReportRows(
           Serviço: movement.service
             ? (serviceLabels[movement.service] ?? movement.service)
             : "—",
+          Destino: item.destination ?? "—",
+          Retirado: item.recipient ?? "—",
           Responsável: movement.userName ?? movement.userId.slice(0, 8),
           Situação: movement.exitType ?? "—",
+          Documento: movement.sourceReference ?? "—",
+          Observação: movement.note ?? "—",
           Reposição: "—",
         })),
       ),
@@ -999,6 +1119,30 @@ function makeStockRows(rows: StockRow[]) {
 }
 function fmt(value: number) {
   return value.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+function movementTypeLabel(type: string) {
+  switch (type) {
+    case "entry":
+      return "Somente entradas";
+    case "exit":
+      return "Somente saídas";
+    case "adjustment":
+      return "Ajustes";
+    case "loss":
+      return "Perdas";
+    default:
+      return "Todos os movimentos";
+  }
+}
+function formatFilterPeriod(
+  filters: { period: PeriodPreset; from: string; to: string },
+  defaults: { from: string; to: string },
+) {
+  if (filters.period !== "personalizado")
+    return PERIOD_PRESETS.find((preset) => preset.value === filters.period)?.label ?? "Período";
+  const from = filters.from || defaults.from;
+  const to = filters.to || defaults.to;
+  return `${from ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${from}T12:00:00Z`)) : "—"} a ${to ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${to}T12:00:00Z`)) : "—"}`;
 }
 function typeLabel(type: string) {
   return type === "entry"
