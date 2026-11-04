@@ -97,6 +97,10 @@ export function ProductFormDialog({
     allowStatusChange ??
     (profile !== null &&
       ["super_admin", "admin", "stock_manager"].includes(profile.role));
+  // Só perfis administrativos podem trocar a unidade de medida do cadastro.
+  const canChangeUnit =
+    profile !== null &&
+    ["super_admin", "admin", "stock_manager"].includes(profile.role);
   const queryClient = useQueryClient();
   const categoriesQuery = useQuery({
     queryKey: ["categories", profile?.company_id],
@@ -152,6 +156,14 @@ export function ProductFormDialog({
       return setBackendError(
         "Registre a saída do saldo antes de inativar este produto.",
       );
+    if (
+      product?.hasStock &&
+      product.unit !== parsed.data.unit &&
+      !window.confirm(
+        "Este produto possui saldo. A unidade será alterada sem converter a quantidade atual nem reescrever o histórico. Deseja continuar?",
+      )
+    )
+      return;
     if (
       parsed.data.unitCost !== null ||
       parsed.data.lotControl ||
@@ -318,8 +330,10 @@ export function ProductFormDialog({
             required
             error={errors.unit}
             hint={
-              product?.hasStock
-                ? "Registre o saldo antes de alterar a unidade."
+              product?.hasStock && canChangeUnit
+                ? "A troca mantém o saldo numérico e não converte o histórico."
+                : product && !canChangeUnit
+                  ? "Somente administrador ou gestor de estoque pode alterar a unidade."
                 : undefined
             }
           >
@@ -330,7 +344,7 @@ export function ProductFormDialog({
                 if (!["pct", "cx", "ct", "mi"].includes(v))
                   set("unitsPerPackage", "");
               }}
-              disabled={Boolean(product?.hasStock)}
+              disabled={Boolean(product) && !canChangeUnit}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
