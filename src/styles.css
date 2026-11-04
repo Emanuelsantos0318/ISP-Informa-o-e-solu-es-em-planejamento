@@ -241,6 +241,14 @@
     display: none !important;
   }
 
+  #report-preview .reports-print-extra-row {
+    display: table-row !important;
+  }
+
+  #report-preview .reports-table-pagination {
+    display: none !important;
+  }
+
   #report-preview .overflow-auto,
   #report-preview .overflow-x-auto,
   #report-preview .overflow-y-auto {

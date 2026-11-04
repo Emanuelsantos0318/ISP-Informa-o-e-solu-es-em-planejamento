@@ -156,6 +156,7 @@ const REPORTS = [
     icon: FileSpreadsheet,
   },
 ] as const;
+const EMPTY_SUPPLIERS: { id: string; name: string }[] = [];
 type ReportId = (typeof REPORTS)[number]["id"];
 type ActiveFilters = ReportFilters & {
   preset: PeriodPreset;
@@ -259,7 +260,7 @@ export function ReportsWorkspace({
     [snapshot, filters, settings, comparison],
   );
   const categories = catalog.categories.data ?? [];
-  const suppliers = catalog.suppliers.data ?? [];
+  const suppliers = catalog.suppliers.data ?? EMPTY_SUPPLIERS;
   const products = snapshot?.products.filter((product) => product.active) ?? [];
   const users = [
     ...new Map(
@@ -305,9 +306,10 @@ export function ReportsWorkspace({
             analytics,
             filteredInvoices,
             operational.serviceLabels,
+            suppliers,
           )
         : [],
-    [analytics, id, filteredInvoices, operational.serviceLabels],
+    [analytics, id, filteredInvoices, operational.serviceLabels, suppliers],
   );
 
   const update = (key: keyof ActiveFilters, value: string) =>
@@ -415,8 +417,9 @@ export function ReportsWorkspace({
         from: { row: 9, column: 1 },
         to: { row: 9, column: Object.keys(rows[0] ?? {}).length },
       };
+      // Não definir `header` aqui: no ExcelJS isso escreve novamente na linha 1
+      // e apagaria o título e os filtros já registrados no início do relatório.
       sheet.columns = Object.keys(rows[0] ?? {}).map((key) => ({
-        header: key,
         width: Math.min(36, Math.max(14, key.length + 4)),
       }));
       if (analytics && id === "estoque") {
@@ -1554,7 +1557,6 @@ function DataTable({
   useEffect(() => setPage(0), [rows.length]);
   const size = 25;
   const count = Math.max(1, Math.ceil(rows.length / size));
-  const visible = rows.slice(page * size, (page + 1) * size);
   return (
     <div className="space-y-3">
       <div className="overflow-auto rounded-md border">
@@ -1572,8 +1574,11 @@ function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {visible.map((row, index) => (
-              <tr key={page + ":" + index} className="hover:bg-muted/30">
+            {rows.map((row, index) => (
+              <tr
+                key={index}
+                className={`hover:bg-muted/30 ${index < page * size || index >= (page + 1) * size ? "reports-print-extra-row hidden" : ""}`}
+              >
                 {row.map((cell, column) => (
                   <td key={column} className="max-w-64 px-3 py-2.5 align-top">
                     {cell}
@@ -1590,7 +1595,7 @@ function DataTable({
         )}
       </div>
       {rows.length > size && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="reports-table-pagination flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {rows.length} registros · página {page + 1} de {count}
           </span>
@@ -1842,6 +1847,7 @@ function getExportRows(
     invoice_total: number | null;
   }[],
   serviceLabels: Record<string, string>,
+  suppliers: { id: string; name: string }[],
 ): Record<string, string | number>[] {
   if (
     id === "mov-produto" ||
@@ -1880,15 +1886,36 @@ function getExportRows(
     return [
       ...invoices.map((item) => ({
         Tipo: "Documento fiscal",
-        Nota: item.invoice_number,
+        Documento: item.invoice_number,
         Série: item.series,
-        FornecedorId: item.supplier_id,
-        Emissão: item.issue_date ?? "—",
-        TotalDocumento: item.invoice_total ?? "Não informado",
+        Produto: "—",
+        Código: "—",
+        Fornecedor:
+          suppliers.find((supplier) => supplier.id === item.supplier_id)
+            ?.name ?? "Fornecedor não localizado",
+        Data: item.issue_date ?? "—",
+        Quantidade: "—",
+        Unidade: "—",
+        ValorDocumento: item.invoice_total ?? "Não informado",
+        Responsável: "—",
+        ServiçoDestino: "—",
       })),
-      ...movements(
-        analytics.movementRows.filter((row) => row.movement.type === "entry"),
-      ),
+      ...analytics.movementRows
+        .filter((row) => row.movement.type === "entry")
+        .map(({ movement, item }) => ({
+          Tipo: "Entrada de estoque",
+          Documento: movement.sourceReference ?? "—",
+          Série: "—",
+          Produto: item.name,
+          Código: item.sku,
+          Fornecedor: "—",
+          Data: movement.occurredAt,
+          Quantidade: item.quantity,
+          Unidade: item.unit,
+          ValorDocumento: "Não informado",
+          Responsável: movement.userName ?? movement.userId,
+          ServiçoDestino: item.destination ?? "—",
+        })),
     ];
   if (id === "indicadores") {
     if (analytics.unitCompatible)
@@ -1994,8 +2021,8 @@ function addWorkbookSheet(
     to: { row: 1, column: Object.keys(rows[0] ?? {}).length },
   };
   sheet.views = [{ state: "frozen", ySplit: 1 }];
+  // Os cabeçalhos já estão na linha 1; `header` sobrescreveria essa linha.
   sheet.columns = Object.keys(rows[0] ?? {}).map((key) => ({
-    header: key,
     width: Math.min(36, Math.max(14, key.length + 4)),
   }));
 }
