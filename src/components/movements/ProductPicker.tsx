@@ -47,7 +47,7 @@ export function ProductPicker({
       found.length === 1 &&
       first &&
       (first.barcode === query.trim() ||
-        first.sku.toLocaleLowerCase("pt-BR") ===
+        (first.sku ?? "").toLocaleLowerCase("pt-BR") ===
           query.trim().toLocaleLowerCase("pt-BR"));
     if (exactCode && first) {
       onSelect(first);

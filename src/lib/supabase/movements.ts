@@ -11,6 +11,8 @@ export type MovementBatchItem = {
   lotNumber?: string | undefined;
   expiresOn?: string | undefined;
   adjustmentDirection?: "increase" | "decrease" | null | undefined;
+  sourceSupplierName?: string | undefined;
+  sourceOrderNumber?: string | undefined;
 };
 
 export type MovementBatchInput = {
@@ -73,6 +75,8 @@ export async function recordMovementBatch(
       lot_number: item.lotNumber ?? null,
       expires_on: item.expiresOn ?? null,
       adjustment_direction: item.adjustmentDirection ?? null,
+      supplier_name: item.sourceSupplierName ?? null,
+      purchase_order_number: item.sourceOrderNumber ?? null,
     })),
     p_supplier_id: input.supplierId ?? null,
     p_source_reference: input.sourceReference ?? null,

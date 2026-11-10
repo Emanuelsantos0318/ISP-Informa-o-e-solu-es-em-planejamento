@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -13,13 +14,20 @@ import { PageIntro, Panel } from "@/components/common/Panel";
 import { EmptyState } from "@/components/common/EmptyState";
 import { BackendNotice } from "@/components/common/BackendNotice";
 import { StatCard } from "@/components/common/StatCard";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/supabase/AuthProvider";
+import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import {
   classifyExpiry,
   classifyStock,
   DEFAULT_STOCK_SETTINGS,
   STOCK_STATUS_LABEL,
 } from "@/lib/rules/stock";
-import { nowInOperationalTz, formatIsoDate } from "@/lib/datetime";
+import {
+  formatDateTime,
+  formatIsoDate,
+  nowInOperationalTz,
+} from "@/lib/datetime";
 import { useStockSettings } from "@/lib/supabase/useStockSettings";
 import { useInventorySnapshot } from "@/lib/supabase/useInventorySnapshot";
 
@@ -37,8 +45,55 @@ export const Route = createFileRoute("/notificacoes")({
 });
 
 function NotificationsPage() {
-  const snapshot = useInventorySnapshot();
+  const { client, profile } = useAuth();
+  const { unitId } = useOperationalScope();
+  const queryClient = useQueryClient();
+  const snapshot = useInventorySnapshot({ movementLimit: 4 });
   const settingsQuery = useStockSettings();
+  const productionNotificationQuery = useQuery({
+    queryKey: ["production-notifications", profile?.user_id, unitId],
+    enabled: Boolean(client && profile && unitId),
+    queryFn: async () => {
+      if (!client || !profile || !unitId) return [];
+      const { data, error } = await client
+        .from("production_notifications")
+        .select("id, event_code, title, message, href, read_at, created_at")
+        .eq("recipient_user_id", profile.user_id)
+        .eq("unit_id", unitId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        event_code: string;
+        title: string;
+        message: string;
+        href: string;
+        read_at: string | null;
+        created_at: string;
+      }>;
+    },
+  });
+  const markProductionNoticeRead = useMutation({
+    mutationFn: async (notificationId: string) => {
+      if (!client || !profile)
+        throw new Error(
+          "Sua sessão expirou. Entre novamente para atualizar o aviso.",
+        );
+      const { error } = await client
+        .from("production_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", notificationId)
+        .eq("recipient_user_id", profile.user_id)
+        .is("read_at", null);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["production-notifications", profile?.user_id, unitId],
+      });
+    },
+  });
   const settings = settingsQuery.data ?? DEFAULT_STOCK_SETTINGS;
   const today = nowInOperationalTz().date;
   const data = snapshot.data;
@@ -70,12 +125,79 @@ function NotificationsPage() {
       product.active && (!product.categoryId || !product.unit || !product.sku),
   );
   const alerts = lowStock.length + expiry.length + incomplete.length;
+  const productionNotifications = productionNotificationQuery.data ?? [];
+  const unreadProductionNotifications = productionNotifications.filter(
+    (notification) => !notification.read_at,
+  ).length;
   return (
     <div className="flex flex-col gap-6">
       <PageIntro
         title="Notificações"
         description="Alertas calculados com saldo, configuração e validade dos lotes da unidade selecionada."
       />
+      <Panel
+        title={`Planejamento de produção · ${unreadProductionNotifications} não lidas`}
+        description="Avisos de revisão e execução dos mapas da unidade selecionada. Cada aviso tem destinatário e confirmação de leitura."
+      >
+        {productionNotificationQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando avisos…</p>
+        ) : productionNotificationQuery.isError ? (
+          <BackendNotice>
+            Não foi possível carregar os avisos de produção. Confirme se a
+            migração de notificações já foi aplicada neste ambiente.
+          </BackendNotice>
+        ) : productionNotifications.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum aviso de planejamento para esta unidade.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {productionNotifications.map((notification) => (
+              <article
+                className={`flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${notification.read_at ? "bg-background" : "border-primary/30 bg-primary/5"}`}
+                key={notification.id}
+              >
+                <div>
+                  <p className="font-medium">{notification.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {notification.message}
+                  </p>
+                  <time
+                    className="text-xs text-muted-foreground"
+                    dateTime={notification.created_at}
+                  >
+                    {formatDateTime(notification.created_at)}
+                  </time>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <a
+                    className="inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+                    href={notification.href}
+                  >
+                    Abrir planejamento
+                  </a>
+                  {!notification.read_at && (
+                    <Button
+                      variant="outline"
+                      disabled={markProductionNoticeRead.isPending}
+                      onClick={() =>
+                        markProductionNoticeRead.mutate(notification.id)
+                      }
+                    >
+                      Marcar lida
+                    </Button>
+                  )}
+                </div>
+              </article>
+            ))}
+            {markProductionNoticeRead.error && (
+              <BackendNotice>
+                {markProductionNoticeRead.error.message}
+              </BackendNotice>
+            )}
+          </div>
+        )}
+      </Panel>
       {snapshot.isLoading && (
         <BackendNotice>Carregando saldos e lotes…</BackendNotice>
       )}

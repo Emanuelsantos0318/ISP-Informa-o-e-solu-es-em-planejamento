@@ -21,7 +21,7 @@ export const categorySchema = z.object({
 export const productSchema = z
   .object({
     name: z.string().trim().min(2, "Informe o nome do produto.").max(120),
-    sku: z.string().trim().min(1, "Informe o SKU.").max(40),
+    sku: z.string().trim().max(40).transform((value) => value || null),
     barcode: z
       .string()
       .trim()

@@ -3,7 +3,7 @@ import type { UnitCode } from "@/lib/config/units";
 export type Product = {
   id: string;
   name: string;
-  sku: string;
+  sku: string | null;
   barcode: string | null;
   brand?: string | null | undefined;
   unit: UnitCode;
@@ -20,6 +20,8 @@ export type MovementItemDraft = {
   releasedUnits?: number | undefined;
   lot?: string | undefined;
   expiry?: string | undefined;
+  sourceSupplierName?: string | undefined;
+  sourceOrderNumber?: string | undefined;
 };
 
 export type ProductPrefill = {
@@ -49,7 +51,7 @@ export function searchProducts(products: Product[], query: string): Product[] {
   const q = norm(query);
   if (!q) return [];
   const exact = products.filter(
-    (p) => p.barcode === query.trim() || norm(p.sku) === q,
+    (p) => p.barcode === query.trim() || norm(p.sku ?? "") === q,
   );
   if (exact.length) return exact;
   return products.filter((p) => norm(p.name).includes(q));

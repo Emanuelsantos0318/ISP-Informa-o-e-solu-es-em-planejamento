@@ -118,7 +118,7 @@ function CadastroPage() {
     active: product.status === "active",
     cells: [
       product.name,
-      product.sku,
+      product.sku ?? "—",
       product.barcode ?? "—",
       product.categoryName ?? "—",
       product.unit,

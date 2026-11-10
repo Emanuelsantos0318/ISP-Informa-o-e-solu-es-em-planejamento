@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   ClipboardList,
+  ClipboardPlus,
   FileBarChart2,
   LayoutDashboard,
   LineChart,
@@ -18,6 +19,7 @@ export type NavItem = {
     | "/saida"
     | "/cadastro"
     | "/planejamento"
+    | "/planejamento-producao"
     | "/relatorios"
     | "/usuarios"
     | "/notificacoes"
@@ -56,6 +58,12 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/planejamento",
     label: "Planejamento",
     icon: LineChart,
+    group: "operacao",
+  },
+  {
+    to: "/planejamento-producao",
+    label: "Planejamento de produção",
+    icon: ClipboardPlus,
     group: "operacao",
   },
   {

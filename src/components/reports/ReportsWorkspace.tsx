@@ -1182,7 +1182,14 @@ function MovementTable({
         item.destination ?? "—",
         item.recipient ?? "—",
         movement.userName ?? movement.userId.slice(0, 8),
-        movement.sourceReference ?? "—",
+        [
+          item.sourceSupplierName,
+          item.sourceOrderNumber ? `OC ${item.sourceOrderNumber}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") ||
+          movement.sourceReference ||
+          "—",
         movement.note ?? "—",
       ])}
     />
