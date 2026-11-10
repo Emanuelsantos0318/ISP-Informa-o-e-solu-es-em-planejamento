@@ -64,7 +64,10 @@ export function AppHeader() {
   const today = useToday();
   const { client, profile } = useAuth();
   const scope = useOperationalScope();
-  const inventory = useInventorySnapshot();
+  const historyIsLoadedByPage = ["/movimentacoes", "/saida"].includes(pathname);
+  const inventory = useInventorySnapshot({
+    movementLimit: historyIsLoadedByPage ? undefined : 4,
+  });
   const stockSettings = useStockSettings();
   const settings = stockSettings.data ?? DEFAULT_STOCK_SETTINGS;
   const operationalToday = nowInOperationalTz().date;
@@ -73,7 +76,11 @@ export function AppHeader() {
         if (!product.active) return false;
         return ["sem_saldo", "critico", "baixo"].includes(
           classifyStock(
-            { balance: product.balance, min: product.minimum, max: product.target },
+            {
+              balance: product.balance,
+              min: product.minimum,
+              max: product.target,
+            },
             settings,
           ),
         );
@@ -82,11 +89,13 @@ export function AppHeader() {
         (lot) =>
           lot.quantity > 0 &&
           Boolean(lot.expiresOn) &&
-          classifyExpiry(lot.expiresOn!, operationalToday, settings) !== "valido",
+          classifyExpiry(lot.expiresOn!, operationalToday, settings) !==
+            "valido",
       ).length +
       inventory.data.products.filter(
         (product) =>
-          product.active && (!product.categoryId || !product.unit || !product.sku),
+          product.active &&
+          (!product.categoryId || !product.unit || !product.sku),
       ).length
     : 0;
   // O histórico de lotes é também a fonte persistente para atividade recente no sino.
@@ -111,7 +120,12 @@ export function AppHeader() {
         </div>
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Alertas de estoque${activeStockAlerts ? `: ${activeStockAlerts}` : ""}`} className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Alertas de estoque${activeStockAlerts ? `: ${activeStockAlerts}` : ""}`}
+              className="relative"
+            >
               <Bell className="size-4.5" />
               {activeStockAlerts > 0 && (
                 <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
@@ -129,15 +143,25 @@ export function AppHeader() {
             </div>
             <div className="border-b px-4 py-3">
               {inventory.isLoading ? (
-                <p className="text-sm text-muted-foreground">Carregando notificações…</p>
+                <p className="text-sm text-muted-foreground">
+                  Carregando notificações…
+                </p>
               ) : inventory.isError ? (
-                <p className="text-sm text-destructive">Não foi possível carregar os alertas desta unidade.</p>
+                <p className="text-sm text-destructive">
+                  Não foi possível carregar os alertas desta unidade.
+                </p>
               ) : activeStockAlerts > 0 ? (
-                <Link to="/notificacoes" className="text-sm font-medium text-warning-foreground hover:underline">
-                  {activeStockAlerts} alerta(s) de estoque ativo(s) · Ver detalhes
+                <Link
+                  to="/notificacoes"
+                  className="text-sm font-medium text-warning-foreground hover:underline"
+                >
+                  {activeStockAlerts} alerta(s) de estoque ativo(s) · Ver
+                  detalhes
                 </Link>
               ) : (
-                <p className="text-sm text-muted-foreground">Nenhum alerta de estoque ativo.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nenhum alerta de estoque ativo.
+                </p>
               )}
             </div>
             <div className="px-4 py-3">
@@ -152,12 +176,22 @@ export function AppHeader() {
                     const otherItems = Math.max(0, movement.items.length - 1);
                     return (
                       <li key={movement.id} className="flex gap-2 text-sm">
-                        <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${isEntry ? "bg-success-soft text-success" : "bg-warning-soft text-warning-foreground"}`}>
-                          {isEntry ? <ArrowDownToLine className="size-3.5" /> : <ArrowUpFromLine className="size-3.5" />}
+                        <span
+                          className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${isEntry ? "bg-success-soft text-success" : "bg-warning-soft text-warning-foreground"}`}
+                        >
+                          {isEntry ? (
+                            <ArrowDownToLine className="size-3.5" />
+                          ) : (
+                            <ArrowUpFromLine className="size-3.5" />
+                          )}
                         </span>
                         <span className="min-w-0">
                           <span className="block font-medium">
-                            {isEntry ? "Entrada registrada" : movement.type === "exit" ? "Saída registrada" : "Movimentação registrada"}
+                            {isEntry
+                              ? "Entrada registrada"
+                              : movement.type === "exit"
+                                ? "Saída registrada"
+                                : "Movimentação registrada"}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {firstItem
@@ -166,7 +200,9 @@ export function AppHeader() {
                           </span>
                           <span className="block text-xs text-muted-foreground">
                             {formatDateTime(movement.occurredAt)}
-                            {movement.sourceReference ? ` · ${movement.sourceReference}` : ""}
+                            {movement.sourceReference
+                              ? ` · ${movement.sourceReference}`
+                              : ""}
                           </span>
                         </span>
                       </li>
@@ -174,7 +210,9 @@ export function AppHeader() {
                   })}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">Nenhuma entrada ou saída recente.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma entrada ou saída recente.
+                </p>
               )}
             </div>
             <div className="border-t p-2">

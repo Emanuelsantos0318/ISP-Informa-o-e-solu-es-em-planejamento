@@ -43,7 +43,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { unitShort } from "@/lib/config/units";
 import { toast } from "sonner";
-import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
+import {
+  clearSessionDraft,
+  readSessionDraft,
+  writeSessionDraft,
+} from "@/lib/session-draft";
 
 export function EntryDialog({
   open,
@@ -207,8 +211,9 @@ export function EntryDialog({
         note: [
           notes.trim(),
           purchaseOrder
-            ? "OC " +
-              purchaseOrder.number +
+            ? (purchaseOrder.isDailyReport
+                ? `Relatório diário de OCs: ${purchaseOrder.orderCount ?? 0} ordens de ${purchaseOrder.supplierCount ?? 0} fornecedores`
+                : "OC " + purchaseOrder.number) +
               ": recebimento físico conferido; " +
               purchaseOrder.receivedLineCount +
               " item(ns) recebido(s), " +
@@ -224,6 +229,8 @@ export function EntryDialog({
           quantity: item.quantity,
           lotNumber: item.lot,
           expiresOn: item.expiry,
+          sourceSupplierName: item.sourceSupplierName,
+          sourceOrderNumber: item.sourceOrderNumber,
         })),
       });
       const productNames = items.slice(0, 3).map((item) => item.product.name);
@@ -243,7 +250,7 @@ export function EntryDialog({
   };
 
   return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -275,34 +282,36 @@ export function EntryDialog({
               onChange={(e) => setTime(e.target.value)}
             />
           </Field>
-          <Field label="Fornecedor">
-            <Select
-              value={supplierId}
-              onValueChange={setSupplierId}
-              disabled={catalog.suppliers.isLoading}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    catalog.suppliers.isLoading
-                      ? "Carregando…"
-                      : catalog.suppliers.data?.length
-                        ? "Selecione"
-                        : "Nenhum cadastrado"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {catalog.suppliers.data
-                  ?.filter((supplier) => supplier.status === "active")
-                  .map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          {!purchaseOrder?.isDailyReport && (
+            <Field label="Fornecedor">
+              <Select
+                value={supplierId}
+                onValueChange={setSupplierId}
+                disabled={catalog.suppliers.isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      catalog.suppliers.isLoading
+                        ? "Carregando…"
+                        : catalog.suppliers.data?.length
+                          ? "Selecione"
+                          : "Nenhum cadastrado"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {catalog.suppliers.data
+                    ?.filter((supplier) => supplier.status === "active")
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
           <Field label="Origem / documento" htmlFor="e-origin">
             <Input
               id="e-origin"
@@ -395,10 +404,15 @@ export function EntryDialog({
           {purchaseOrder && (
             <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <p className="font-medium">
-                Recebimento da OC {purchaseOrder.number} conferido; entrada ainda não lançada
+                {purchaseOrder.isDailyReport
+                  ? `Relatório diário conferido · ${purchaseOrder.orderCount ?? 0} OCs / ${purchaseOrder.supplierCount ?? 0} fornecedores`
+                  : `Recebimento da OC ${purchaseOrder.number} conferido`}
+                ; entrada ainda não lançada
               </p>
               <p className="text-muted-foreground">
-                Os itens só serão registrados nas movimentações e somados ao estoque quando você clicar em “Registrar entrada no estoque” ao final deste formulário.
+                Os itens só serão registrados nas movimentações e somados ao
+                estoque quando você clicar em “Registrar entrada no estoque” ao
+                final deste formulário.
               </p>
               <p className="text-muted-foreground">
                 Data prevista:{" "}
@@ -416,6 +430,11 @@ export function EntryDialog({
                 {purchaseOrder.lines.map((line, index) => {
                   return (
                     <li key={line.supplierCode + "-" + index}>
+                      {line.supplierName && (
+                        <>
+                          {line.supplierName} · OC {line.orderNumber} ·{" "}
+                        </>
+                      )}
                       {line.productName}: {line.receivedQuantity}{" "}
                       {unitShort(line.productUnit)} recebido(s) (pedido:{" "}
                       {line.orderedQuantity} {line.packageDescription})
@@ -576,7 +595,11 @@ export function EntryDialog({
             setInvoice(null);
             setInvoiceHasMappedLines(false);
             setSelected(null);
-            setOrigin("OC " + nextOrder.number);
+            setOrigin(
+              nextOrder.isDailyReport
+                ? `Relatório diário de OCs ${nextOrder.number}`
+                : "OC " + nextOrder.number,
+            );
             setItems(
               receivedItems.map((item) => ({ ...item, key: createUuid() })),
             );

@@ -98,6 +98,64 @@ export function formatDateTime(value: Date | string): string {
   }).format(typeof value === "string" ? new Date(value) : value);
 }
 
+/** Extrai a data de operação de um instante usando o fuso único da aplicação. */
+export function operationalDateOfIso(value: string): string | null {
+  const instant = new Date(value);
+  if (!Number.isFinite(instant.getTime())) return null;
+  const parts = Object.fromEntries(
+    partsFormatter
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts["year"]}-${parts["month"]}-${parts["day"]}`;
+}
+
+/** Formata uma data operacional para títulos e documentos impressos. */
+export function formatOperationalDateLabel(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const value = new Date(`${date}T12:00:00Z`);
+  if (!Number.isFinite(value.getTime())) return date;
+  const label = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: OPERATIONAL_TZ,
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(value);
+  return label.charAt(0).toLocaleUpperCase("pt-BR") + label.slice(1);
+}
+
+/** Moves an ISO calendar date by whole days without the browser's local timezone. */
+export function addOperationalDays(
+  isoDate: string,
+  days: number,
+): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !Number.isInteger(days))
+    return null;
+  const [year, month, day] = isoDate.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const value = new Date(Date.UTC(year, month - 1, day));
+  if (
+    value.getUTCFullYear() !== year ||
+    value.getUTCMonth() + 1 !== month ||
+    value.getUTCDate() !== day
+  )
+    return null;
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+/** Subtracts elapsed hours from an ISO instant without local-time interpretation. */
+export function subtractHoursFromIso(
+  instant: string,
+  hours: number,
+): string | null {
+  const timestamp = Date.parse(instant);
+  if (!Number.isFinite(timestamp) || !Number.isInteger(hours) || hours < 0)
+    return null;
+  return new Date(timestamp - hours * 60 * 60 * 1000).toISOString();
+}
+
 /** Formats a YYYY-MM-DD date as dd/mm/aaaa. */
 export function formatIsoDate(iso: string): string {
   const [y, m, d] = iso.split("-");

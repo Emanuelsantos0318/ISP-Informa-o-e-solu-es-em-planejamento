@@ -31,10 +31,15 @@ export type ImportedPurchaseOrder = {
   expectedDeliveryDate: string;
   total: string;
   pageCount: number;
+  isDailyReport?: boolean | undefined;
+  supplierCount?: number | undefined;
+  orderCount?: number | undefined;
   orderedLineCount: number;
   receivedLineCount: number;
   notReceivedLineCount: number;
   lines: Array<{
+    orderNumber?: string | undefined;
+    supplierName?: string | undefined;
     supplierCode: string;
     description: string;
     orderedQuantity: string;
@@ -134,7 +139,7 @@ export function PurchaseOrderImportDialog({
   };
 
   useEffect(() => {
-    if (!open || !order || supplierId) return;
+    if (!open || !order || order.isDailyReport || supplierId) return;
     const found = suggestedSupplier(
       catalog.suppliers.data ?? [],
       order.supplierName,
@@ -195,7 +200,7 @@ export function PurchaseOrderImportDialog({
 
   const apply = () => {
     if (!order) return;
-    if (!supplierId)
+    if (!order.isDailyReport && !supplierId)
       return setError(
         "Selecione o fornecedor já cadastrado antes de continuar com o recebimento.",
       );
@@ -235,8 +240,15 @@ export function PurchaseOrderImportDialog({
           `${unit.label} aceita apenas números inteiros para ${product.name}.`,
         );
 
-      receivedItems.push({ product, quantity });
+      receivedItems.push({
+        product,
+        quantity,
+        sourceSupplierName: source.supplierName,
+        sourceOrderNumber: source.orderNumber,
+      });
       receivedLines.push({
+        orderNumber: source.orderNumber,
+        supplierName: source.supplierName,
         supplierCode: source.supplierCode,
         description: source.description,
         orderedQuantity: source.orderedQuantity,
@@ -259,6 +271,9 @@ export function PurchaseOrderImportDialog({
         expectedDeliveryDate: order.expectedDeliveryDate,
         total: order.total,
         pageCount: order.pageCount,
+        isDailyReport: order.isDailyReport,
+        supplierCount: order.supplierCount,
+        orderCount: order.orderCount,
         orderedLineCount: order.items.length,
         receivedLineCount: receivedItems.length,
         notReceivedLineCount,
@@ -348,22 +363,31 @@ export function PurchaseOrderImportDialog({
                   value={order.supplierName || "Não identificado"}
                 />
               </Field>
-              <Field label="Fornecedor cadastrado" required>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={supplierId}
-                  onChange={(event) => setSupplierId(event.target.value)}
-                >
-                  <option value="">Selecione…</option>
-                  {catalog.suppliers.data
-                    ?.filter((supplier) => supplier.status === "active")
-                    .map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                </select>
-              </Field>
+              {order.isDailyReport ? (
+                <Field label="Fornecedores por item">
+                  <Input
+                    readOnly
+                    value={`${order.supplierCount ?? 0} identificados`}
+                  />
+                </Field>
+              ) : (
+                <Field label="Fornecedor cadastrado" required>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    value={supplierId}
+                    onChange={(event) => setSupplierId(event.target.value)}
+                  >
+                    <option value="">Selecione…</option>
+                    {catalog.suppliers.data
+                      ?.filter((supplier) => supplier.status === "active")
+                      .map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Número da OC">
                 <Input readOnly value={order.number} />
               </Field>
@@ -382,6 +406,9 @@ export function PurchaseOrderImportDialog({
               </Field>
             </div>
             <p className="text-sm text-muted-foreground">
+              {order.isDailyReport
+                ? `${order.orderCount ?? 0} OCs · ${order.supplierCount ?? 0} fornecedores · `
+                : ""}
               Unidade da OC: {order.unitName || "não identificada"} · Total do
               pedido: {order.total ? `R$ ${order.total}` : "não identificado"} ·{" "}
               {order.items.length} itens previstos · {order.pageCount} página(s)
@@ -391,6 +418,9 @@ export function PurchaseOrderImportDialog({
               <table className="w-full min-w-[1000px] text-left text-xs">
                 <thead className="sticky top-0 bg-muted">
                   <tr>
+                    {order.isDailyReport && (
+                      <th className="p-2">Fornecedor / OC</th>
+                    )}
                     <th className="p-2">Cód. fornecedor</th>
                     <th className="p-2">Produto na OC</th>
                     <th className="p-2">Pedido</th>
@@ -419,7 +449,17 @@ export function PurchaseOrderImportDialog({
                         key={`${item.supplierCode}-${index}`}
                         className="border-t align-top"
                       >
-                        <td className="p-2">{item.supplierCode}</td>
+                        {order.isDailyReport && (
+                          <td className="p-2">
+                            <span className="block font-medium">
+                              {item.supplierName}
+                            </span>
+                            <span className="text-muted-foreground">
+                              OC {item.orderNumber}
+                            </span>
+                          </td>
+                        )}
+                        <td className="p-2">{item.supplierCode || "—"}</td>
                         <td className="p-2">
                           <Input
                             aria-label={`Descrição da OC, item ${item.sequence}`}

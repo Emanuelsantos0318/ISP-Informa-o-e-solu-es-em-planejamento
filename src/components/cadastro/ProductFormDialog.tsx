@@ -119,7 +119,7 @@ export function ProductFormDialog({
       setForm({
         ...empty,
         name: product?.name ?? prefill?.name ?? "",
-        sku: product?.sku ?? prefill?.sku ?? prefill?.barcode ?? "",
+        sku: product?.sku ?? prefill?.sku ?? "",
         barcode: product?.barcode ?? prefill?.barcode ?? "",
         brand: product?.brand ?? "",
         categoryId: product?.categoryId ?? "",
@@ -267,11 +267,10 @@ export function ProductFormDialog({
             />
           </Field>
           <Field
-            label="SKU"
+            label="SKU (opcional)"
             htmlFor="p-sku"
-            required
             error={errors.sku}
-            hint="Único no sistema"
+            hint="Deixe em branco se o fornecedor não informar um SKU."
           >
             <Input
               id="p-sku"

@@ -17,6 +17,7 @@ import { Route as MovimentacoesRouteImport } from './routes/movimentacoes'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanejamentoRouteImport } from './routes/planejamento'
+import { Route as PlanejamentoProducaoRouteImport } from './routes/planejamento-producao'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as SaidaRouteImport } from './routes/saida'
@@ -64,6 +65,11 @@ const PlanejamentoRoute = PlanejamentoRouteImport.update({
   path: '/planejamento',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanejamentoProducaoRoute = PlanejamentoProducaoRouteImport.update({
+  id: '/planejamento-producao',
+  path: '/planejamento-producao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
   path: '/redefinir-senha',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/planejamento-producao': typeof PlanejamentoProducaoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/planejamento-producao': typeof PlanejamentoProducaoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
+  '/planejamento-producao': typeof PlanejamentoProducaoRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/relatorios': typeof RelatoriosRouteWithChildren
   '/saida': typeof SaidaRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/notificacoes'
     | '/perfil'
     | '/planejamento'
+    | '/planejamento-producao'
     | '/redefinir-senha'
     | '/relatorios'
     | '/saida'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/notificacoes'
     | '/perfil'
     | '/planejamento'
+    | '/planejamento-producao'
     | '/redefinir-senha'
     | '/relatorios'
     | '/saida'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/notificacoes'
     | '/perfil'
     | '/planejamento'
+    | '/planejamento-producao'
     | '/redefinir-senha'
     | '/relatorios'
     | '/saida'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   NotificacoesRoute: typeof NotificacoesRoute
   PerfilRoute: typeof PerfilRoute
   PlanejamentoRoute: typeof PlanejamentoRoute
+  PlanejamentoProducaoRoute: typeof PlanejamentoProducaoRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   RelatoriosRoute: typeof RelatoriosRouteWithChildren
   SaidaRoute: typeof SaidaRoute
@@ -267,6 +280,13 @@ declare module '@tanstack/react-router' {
       path: '/planejamento'
       fullPath: '/planejamento'
       preLoaderRoute: typeof PlanejamentoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/planejamento-producao': {
+      id: '/planejamento-producao'
+      path: '/planejamento-producao'
+      fullPath: '/planejamento-producao'
+      preLoaderRoute: typeof PlanejamentoProducaoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/redefinir-senha': {
@@ -335,6 +355,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotificacoesRoute: NotificacoesRoute,
   PerfilRoute: PerfilRoute,
   PlanejamentoRoute: PlanejamentoRoute,
+  PlanejamentoProducaoRoute: PlanejamentoProducaoRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
   RelatoriosRoute: RelatoriosRouteWithChildren,
   SaidaRoute: SaidaRoute,

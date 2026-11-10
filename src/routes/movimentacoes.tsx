@@ -134,6 +134,8 @@ function MovementsPage() {
               item.name,
               item.sku,
               item.lotNumber ?? "",
+              item.sourceSupplierName ?? "",
+              item.sourceOrderNumber ?? "",
             ]),
           ].some((value) => value.toLocaleLowerCase("pt-BR").includes(query))
         )
@@ -353,6 +355,12 @@ function MovementsPage() {
                                 : item.sku}
                               {item.lotNumber
                                 ? ` · Lote ${item.lotNumber}`
+                                : ""}
+                              {item.sourceSupplierName
+                                ? ` · ${item.sourceSupplierName}`
+                                : ""}
+                              {item.sourceOrderNumber
+                                ? ` · OC ${item.sourceOrderNumber}`
                                 : ""}
                             </span>
                           </td>

@@ -93,7 +93,7 @@ export async function listProducts(
     return {
       id: String(row["id"]),
       name: String(row["name"]),
-      sku: String(row["sku"]),
+      sku: typeof row["sku"] === "string" ? row["sku"] : null,
       barcode: typeof row["barcode"] === "string" ? row["barcode"] : null,
       brand: typeof row["brand"] === "string" ? row["brand"] : null,
       unit: supportedUnit,

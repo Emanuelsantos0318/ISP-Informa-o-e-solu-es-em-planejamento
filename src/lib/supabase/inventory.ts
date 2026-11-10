@@ -50,6 +50,8 @@ export type MovementItem = {
   unitsPerPackage: number | null;
   destination: string | null;
   recipient: string | null;
+  sourceSupplierName?: string | null | undefined;
+  sourceOrderNumber?: string | null | undefined;
 };
 
 export type StockLot = {
@@ -91,13 +93,61 @@ function record(value: unknown): Raw {
   return value && typeof value === "object" ? (value as Raw) : {};
 }
 
+/** Relaciona partes por lote à linha original, respeitando a ordem gravada pela RPC. */
+export function mapMovementPartsToRequestItems(
+  requestItems: unknown[],
+  movementParts: Array<{ productId: string; quantity: number }>,
+): number[] {
+  const indexes: number[] = [];
+  let requestIndex = 0;
+  let requestRemaining = 0;
+
+  for (const part of movementParts) {
+    let matched = false;
+    while (requestIndex < requestItems.length) {
+      const requestItem = record(requestItems[requestIndex]);
+      const requestProductId = text(requestItem["product_id"]);
+      const requestQuantity = number(requestItem["quantity"]);
+
+      if (requestProductId !== part.productId || requestQuantity <= 0) {
+        requestIndex += 1;
+        requestRemaining = 0;
+        continue;
+      }
+
+      if (requestRemaining <= 0) requestRemaining = requestQuantity;
+      indexes.push(requestIndex);
+      requestRemaining -= part.quantity;
+      if (requestRemaining <= 0.0005) {
+        requestIndex += 1;
+        requestRemaining = 0;
+      }
+      matched = true;
+      break;
+    }
+
+    if (!matched) indexes.push(-1);
+  }
+
+  return indexes;
+}
+
 export async function loadInventorySnapshot(
   client: SupabaseClient,
   companyId: string,
   unitId: string,
   from?: string | undefined,
   to?: string | undefined,
+  movementLimit?: number | undefined,
 ): Promise<InventorySnapshot> {
+  if (
+    movementLimit !== undefined &&
+    (!Number.isInteger(movementLimit) || movementLimit < 0)
+  ) {
+    throw new RangeError(
+      "O limite de movimentações deve ser um inteiro não negativo.",
+    );
+  }
   // Cada conjunto usa ordenação estável e é paginado para evitar truncamento em 1.000 linhas.
   const productQuery = client
     .from("products")
@@ -145,13 +195,30 @@ export async function loadInventorySnapshot(
   if (to) legacyQuery = legacyQuery.lte("occurred_at", to);
 
   // As consultas independentes rodam juntas para compor uma fotografia consistente da tela.
+  const recentBatchesPromise =
+    movementLimit === undefined
+      ? readAllPages(batchQuery)
+      : movementLimit === 0
+        ? Promise.resolve([])
+        : (async () => {
+            const { data, error } = await batchQuery.range(
+              0,
+              movementLimit - 1,
+            );
+            if (error) throw error;
+            return data ?? [];
+          })();
+  const legacyPromise =
+    movementLimit === undefined
+      ? readAllPages(legacyQuery)
+      : Promise.resolve([]);
   const [productsRaw, balancesRaw, lotsRaw, batchesRaw, legacyRaw] =
     await Promise.all([
       readAllPages(productQuery),
       readAllPages(balanceQuery),
       readAllPages(lotQuery),
-      readAllPages(batchQuery),
-      readAllPages(legacyQuery),
+      recentBatchesPromise,
+      legacyPromise,
     ]);
   // A partir daqui os registros brutos são normalizados para os modelos usados pela UI.
   const productsRows = productsRaw as Raw[];
@@ -254,8 +321,46 @@ export async function loadInventorySnapshot(
   }));
   const movementById = new Map<string, Raw>();
   for (const row of detailsRaw as Raw[]) movementById.set(text(row["id"]), row);
-  const itemsByBatch = new Map<string, MovementItem[]>();
   const batchById = new Map(batchesRows.map((row) => [text(row["id"]), row]));
+  const linksByBatch = new Map<string, Raw[]>();
+  for (const link of itemsRaw) {
+    const batchId = text(link["batch_id"]);
+    const links = linksByBatch.get(batchId) ?? [];
+    links.push(link);
+    linksByBatch.set(batchId, links);
+  }
+  const requestIndexByMovementId = new Map<string, number>();
+  for (const [batchId, links] of linksByBatch) {
+    const batch = batchById.get(batchId);
+    const payload = record(batch?.["request_payload"]);
+    const requestedItems = Array.isArray(payload["items"])
+      ? payload["items"]
+      : [];
+    const movementParts = links.flatMap((link) => {
+      const movementId = text(link["movement_id"]);
+      const movement = movementById.get(movementId);
+      return movement
+        ? [
+            {
+              movementId,
+              productId: text(movement["product_id"]),
+              quantity: number(movement["quantity"]),
+            },
+          ]
+        : [];
+    });
+    const requestIndexes = mapMovementPartsToRequestItems(
+      requestedItems,
+      movementParts,
+    );
+    movementParts.forEach((part, index) => {
+      requestIndexByMovementId.set(
+        part.movementId,
+        requestIndexes[index] ?? -1,
+      );
+    });
+  }
+  const itemsByBatch = new Map<string, MovementItem[]>();
   for (const link of itemsRaw) {
     const movement = movementById.get(text(link["movement_id"]));
     if (!movement) continue;
@@ -269,7 +374,12 @@ export async function loadInventorySnapshot(
       ? payload["items"]
       : [];
     const itemIndex = Math.max(0, number(link["item_index"]) - 1);
-    const requestItem = record(requestedItems[itemIndex]);
+    const requestIndex = requestIndexByMovementId.get(text(movement["id"]));
+    const mappedIndex =
+      requestIndex !== undefined && requestIndex >= 0
+        ? requestIndex
+        : itemIndex;
+    const requestItem = record(requestedItems[mappedIndex]);
     const batchItems = itemsByBatch.get(batchId) ?? [];
     batchItems.push({
       id: text(movement["id"]),
@@ -292,6 +402,8 @@ export async function loadInventorySnapshot(
       unitsPerPackage: nullableNumber(requestItem["units_per_package"]),
       destination: nullableText(requestItem["destination"]),
       recipient: nullableText(requestItem["recipient"]),
+      sourceSupplierName: nullableText(requestItem["supplier_name"]),
+      sourceOrderNumber: nullableText(requestItem["purchase_order_number"]),
     });
     itemsByBatch.set(batchId, batchItems);
   }
@@ -353,6 +465,8 @@ export async function loadInventorySnapshot(
         unitsPerPackage: null,
         destination: null,
         recipient: null,
+        sourceSupplierName: null,
+        sourceOrderNumber: null,
       };
       return {
         id: `legacy:${sourceId}`,

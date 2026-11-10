@@ -201,9 +201,18 @@
   );
 }
 
+.protein-map-print {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 landscape;
+    margin: 10mm;
+  }
+
+  @page protein-map-page {
+    size: A4 portrait;
     margin: 10mm;
   }
 
@@ -288,6 +297,98 @@
 
   #report-preview .surface {
     box-shadow: none !important;
+  }
+
+  #report-preview .protein-map-panel > div:first-child {
+    display: none !important;
+  }
+
+  #report-preview .protein-map-screen,
+  #report-preview .hortifruti-map-section {
+    display: none !important;
+  }
+
+  #report-preview .protein-map-print {
+    display: block !important;
+    page: protein-map-page;
+    color: #17324d;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  #report-preview .protein-map-print__header {
+    display: flex;
+    min-height: 74px;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 3px solid #0a7c84;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+  }
+
+  #report-preview .protein-map-print__header img {
+    width: 68px;
+    height: 68px;
+    object-fit: contain;
+  }
+
+  #report-preview .protein-map-print__header h1 {
+    margin: 0 0 4px;
+    color: #103a56;
+    font-size: 17pt;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  #report-preview .protein-map-print__header p {
+    margin: 2px 0;
+    color: #3d6078;
+    font-size: 9pt;
+  }
+
+  #report-preview .protein-map-section {
+    margin: 0 0 16px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #report-preview .protein-map-section h2 {
+    margin: 0;
+    border: 1px solid #8da5bc;
+    background: #d8e7f7 !important;
+    padding: 7px;
+    color: #103a56;
+    font-size: 10pt;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  #report-preview .protein-map-section table {
+    font-size: 8.5pt;
+  }
+
+  #report-preview .protein-map-section th {
+    background: #eaf1f8 !important;
+    color: #17324d;
+    font-size: 7.5pt;
+    text-align: center;
+  }
+
+  #report-preview .protein-map-section th:nth-child(1) {
+    width: 27%;
+  }
+
+  #report-preview .protein-map-section th:nth-child(2) {
+    width: 24%;
+  }
+
+  #report-preview .protein-map-section th:nth-child(3) {
+    width: 20%;
+  }
+
+  #report-preview .protein-map-section th:nth-child(4),
+  #report-preview .protein-map-section th:nth-child(5) {
+    width: 14.5%;
   }
 
   #report-preview .reports-page--detail .grid {

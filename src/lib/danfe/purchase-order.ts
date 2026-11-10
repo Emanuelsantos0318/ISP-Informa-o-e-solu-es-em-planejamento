@@ -8,6 +8,8 @@ const MAX_PAGES = 15;
 
 export type PurchaseOrderLine = {
   sequence: number;
+  orderNumber?: string | undefined;
+  supplierName?: string | undefined;
   supplierCode: string;
   description: string;
   orderedQuantity: string;
@@ -19,6 +21,9 @@ export type PurchaseOrderLine = {
 export type PurchaseOrderPdf = {
   number: string;
   supplierName: string;
+  isDailyReport?: boolean | undefined;
+  supplierCount?: number | undefined;
+  orderCount?: number | undefined;
   unitName: string;
   expectedDeliveryDate: string;
   total: string;
@@ -68,6 +73,152 @@ function readColumn(line: TextLine, width: number, from: number, to: number) {
       return ratio >= from && ratio < to;
     }),
   );
+}
+
+function parseDailyPurchaseOrderReport(
+  lines: TextLine[],
+  textPages: string[],
+  pageCount: number,
+): PurchaseOrderPdf {
+  const items: PurchaseOrderLine[] = [];
+  const groupKeys = new Set<string>();
+  const supplierNames = new Set<string>();
+  const reportDates = new Set<string>();
+  let currentSupplier = "";
+  let previousItem: PurchaseOrderLine | null = null;
+  let previousItemY = 0;
+
+  for (const line of lines) {
+    const width = line.width;
+    const text = joinParts([...line.parts]);
+    const normalizedText = normalize(text);
+    const dateText = readColumn(line, width, 0, 0.072);
+    const orderNumber = readColumn(line, width, 0.072, 0.125).replace(
+      /\s/g,
+      "",
+    );
+    const isItemRow =
+      /^\d{2}\/\d{2}\/\d{4}$/.test(dateText) &&
+      /^\d{1,3}(?:\.\d{3})+$/.test(orderNumber);
+
+    if (isItemRow) {
+      const description = readColumn(line, width, 0.125, 0.385);
+      const quantityAndPackage = readColumn(line, width, 0.55, 0.715);
+      const quantityMatch = quantityAndPackage.match(/^([\d.,]+)\s*(.*)$/);
+      const unitPrice = readColumn(line, width, 0.715, 0.777);
+      const total = readColumn(line, width, 0.777, 0.825);
+      if (!description) continue;
+      const supplierName = currentSupplier || "Fornecedor não identificado";
+
+      const groupKey = `${normalize(supplierName)}|${orderNumber}`;
+      groupKeys.add(groupKey);
+      supplierNames.add(supplierName);
+      reportDates.add(dateText);
+      const item: PurchaseOrderLine = {
+        sequence: items.length + 1,
+        orderNumber,
+        supplierName,
+        supplierCode: "",
+        description,
+        orderedQuantity: normalizePdfNumber(quantityMatch?.[1] ?? ""),
+        packageDescription: (quantityMatch?.[2] ?? "").trim(),
+        unitPrice: normalizePdfNumber(unitPrice),
+        total: normalizePdfNumber(total),
+      };
+      items.push(item);
+      previousItem = item;
+      previousItemY = line.y;
+      continue;
+    }
+
+    // O cabeçalho do fornecedor aparece uma vez por grupo; em quebras de
+    // página, o fornecedor anterior continua valendo até o próximo título.
+    const firstPart = [...line.parts].sort((a, b) => a.x - b.x)[0];
+    const firstPartRatio = firstPart ? firstPart.x / width : 1;
+    const isReportHeading =
+      normalizedText.includes("relatorio de ordens de compra") ||
+      normalizedText.includes("lbgs cd salvador") ||
+      normalizedText.includes("resumo por data de entrega") ||
+      normalizedText.includes("hospital geral") ||
+      normalizedText.includes("periodo") ||
+      normalizedText.includes("dt ent") ||
+      normalizedText.includes("n oc") ||
+      normalizedText.includes("contato") ||
+      normalizedText.includes("analise critica") ||
+      normalizedText.startsWith("data:") ||
+      normalizedText === "total:";
+    if (
+      firstPartRatio < 0.075 &&
+      !isReportHeading &&
+      !/\d/.test(text) &&
+      text.length >= 2 &&
+      text.length <= 100
+    ) {
+      currentSupplier = text;
+      previousItem = null;
+      continue;
+    }
+
+    // Alguns nomes longos quebram para a próxima linha do PDF sem repetir a
+    // data e o número da OC; anexa-se somente texto isolado na coluna Item.
+    const continuation = line.parts.every((part) => {
+      const ratio = part.x / width;
+      return ratio >= 0.12 && ratio < 0.385;
+    });
+    const continuationText = readColumn(line, width, 0.12, 0.385);
+    if (
+      previousItem &&
+      continuation &&
+      continuationText &&
+      Math.abs(previousItemY - line.y) <= 12
+    ) {
+      previousItem.description = `${previousItem.description} ${continuationText}`;
+      previousItemY = line.y;
+    } else if (normalizedText.includes("dt ent")) {
+      previousItem = null;
+    }
+  }
+
+  if (!items.length)
+    throw new Error(
+      "O relatório diário foi reconhecido, mas não encontrei linhas com data, número da OC e produto. Confira se o PDF segue o modelo de resumo por data de entrega.",
+    );
+
+  const extractedText = textPages.join("\n");
+  const uniqueReportDates = [...reportDates];
+  const dateMatch = extractedText.match(
+    /(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i,
+  );
+  const expectedDeliveryDate =
+    dateMatch?.[1] && dateMatch[2] && dateMatch[1] === dateMatch[2]
+      ? parseDate(dateMatch[1])
+      : uniqueReportDates.length === 1
+        ? parseDate(uniqueReportDates[0] ?? "")
+        : "";
+  const unitName =
+    textPages
+      .flatMap((page) => page.split(/\r?\n/))
+      .find((line) => normalize(line).startsWith("hospital geral"))
+      ?.trim() ?? "";
+  const total =
+    extractedText.match(/(\d{1,3}(?:\.\d{3})*,\d{2})\s*total\s*:/i)?.[1] ?? "";
+  const reportDate = expectedDeliveryDate
+    ? expectedDeliveryDate.split("-").reverse().join("/")
+    : "data não identificada";
+
+  return {
+    number: `Diária ${reportDate}`,
+    supplierName: `${supplierNames.size} fornecedores no relatório`,
+    isDailyReport: true,
+    supplierCount: supplierNames.size,
+    orderCount: groupKeys.size,
+    unitName,
+    expectedDeliveryDate,
+    total,
+    pageCount,
+    extractedText,
+    items,
+  };
 }
 
 /** Extracts selectable text and table rows from the digital OC template. */
@@ -151,6 +302,17 @@ export async function extractPurchaseOrderPdf(
     }
 
     const extractedText = textPages.join("\n");
+    const normalizedExtractedText = normalize(extractedText);
+    if (
+      normalizedExtractedText.includes("resumo por data de entrega") &&
+      normalizedExtractedText.includes("ordens de compra")
+    ) {
+      return parseDailyPurchaseOrderReport(
+        allLines,
+        textPages,
+        document.numPages,
+      );
+    }
     if (!normalize(extractedText).includes("ordem de compra"))
       throw new Error(
         "Este PDF não parece ser uma ordem de compra digital compatível. Selecione uma OC pesquisável ou use a entrada manual.",
@@ -257,12 +419,17 @@ export async function extractPurchaseOrderPdf(
     return {
       number: orderNumber,
       supplierName,
+      isDailyReport: false,
       unitName,
       expectedDeliveryDate,
       total,
       pageCount: document.numPages,
       extractedText,
-      items,
+      items: items.map((item) => ({
+        ...item,
+        orderNumber,
+        supplierName,
+      })),
     };
   } finally {
     signal?.removeEventListener("abort", abortProcessing);
