@@ -6,6 +6,7 @@ import {
   History,
   Package2,
   ShieldAlert,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { BackendNotice } from "@/components/common/BackendNotice";
@@ -49,6 +50,7 @@ import {
 import {
   prefillFromQuery,
   searchProducts,
+  type MovementItemDraft,
   type Product,
   type ProductPrefill,
 } from "@/lib/types";
@@ -116,7 +118,10 @@ function OperatorExitPage() {
     useState<ProductPrefill>({});
   const [pendingCreatedProductId, setPendingCreatedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(null);
+  const [pendingItems, setPendingItems] = useState<MovementItemDraft[]>([]);
+  const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState("registrar");
   const [tabPreferenceLoaded, setTabPreferenceLoaded] = useState(false);
   const [destination, setDestination] = useState<ExitDestinationCode | "">("");
@@ -134,7 +139,11 @@ function OperatorExitPage() {
     // Restaura a última seção de saídas aberta ao voltar para esta rota.
     try {
       const saved = window.localStorage.getItem(EXIT_TAB_KEY);
-      if (saved === "registrar" || saved === "historico" || saved === "produtos")
+      if (
+        saved === "registrar" ||
+        saved === "historico" ||
+        saved === "produtos"
+      )
         setActiveTab(saved);
     } catch {
       // A página continua utilizável se o navegador bloquear o armazenamento.
@@ -269,6 +278,16 @@ function OperatorExitPage() {
       setSelectedProduct(current);
   }, [productById, selectedProduct]);
 
+  useEffect(() => {
+    // Atualiza os saldos dos itens já separados sem descartar o lote em edição.
+    setPendingItems((current) =>
+      current.map((item) => ({
+        ...item,
+        product: productById.get(item.product.id) ?? item.product,
+      })),
+    );
+  }, [productById]);
+
   if (profile?.role !== "operator") {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -289,18 +308,51 @@ function OperatorExitPage() {
     setSuccessMessage(null);
   };
 
-  // Valida destino/período e envia a saída ao banco em uma única operação idempotente.
-  const recordExit = async (item: {
-    product: Product;
-    quantity: number;
-    releasedUnits?: number | undefined;
-  }) => {
+  // Inclui o item na lista temporária; nenhuma baixa acontece antes da confirmação do lote.
+  const addPendingExitItem = (item: Omit<MovementItemDraft, "key">) => {
+    if (pendingItems.length >= 100) {
+      setFormError(
+        "Cada registro aceita até 100 itens. Confirme este lote antes de iniciar outro.",
+      );
+      return;
+    }
+    setPendingItems((current) => [...current, { ...item, key: createUuid() }]);
+    setSelectedProduct(null);
+    setFormError(null);
+    setSuccessMessage("Item adicionado à lista.");
+    window.requestAnimationFrame(() => scannerRef.current?.focus());
+  };
+
+  // Valida destino/período e envia todos os itens ao banco em uma operação atômica.
+  const recordExit = async () => {
+    if (pendingItems.length === 0) {
+      setFormError("Adicione pelo menos um produto ao registro.");
+      return;
+    }
     if (!destination) {
       setFormError("Selecione o destino para liberar o produto.");
       document.getElementById("exit-destinations")?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
+      return;
+    }
+    const totalByProduct = new Map<string, number>();
+    for (const item of pendingItems) {
+      totalByProduct.set(
+        item.product.id,
+        (totalByProduct.get(item.product.id) ?? 0) + item.quantity,
+      );
+    }
+    const insufficient = pendingItems.find(
+      (item) =>
+        Math.round((totalByProduct.get(item.product.id) ?? 0) * 1000) >
+        Math.round(item.product.balance * 1000),
+    );
+    if (insufficient) {
+      setFormError(
+        `A quantidade total de ${insufficient.product.name} excede o saldo disponível (${insufficient.product.balance} ${unitShort(insufficient.product.unit)}).`,
+      );
       return;
     }
     const current = nowInOperationalTz();
@@ -333,23 +385,22 @@ function OperatorExitPage() {
         idempotencyKey: createUuid(),
         serviceCode: effectiveService,
         exitTypeCode: exitType,
-        items: [
-          {
-            productId: item.product.id,
-            quantity: item.quantity,
-            unitsReleased: item.releasedUnits,
-            unitsPerPackage: item.releasedUnits
-              ? item.product.unitsPerPackage
-              : null,
-            destination,
-            recipient: recipient.trim() || null,
-          },
-        ],
+        items: pendingItems.map((item) => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          unitsReleased: item.releasedUnits,
+          unitsPerPackage: item.releasedUnits
+            ? item.product.unitsPerPackage
+            : null,
+          destination,
+          recipient: recipient.trim() || null,
+        })),
       });
       setSuccessMessage(
-        `${item.product.name}: saída registrada para ${exitDestinationLabel(destination)}.`,
+        `${pendingItems.length} item(ns) registrado(s) para ${exitDestinationLabel(destination)}.`,
       );
       setSelectedProduct(null);
+      setPendingItems([]);
       setFormError(null);
     } catch (error) {
       setFormError(
@@ -427,7 +478,11 @@ function OperatorExitPage() {
                       inputRef={scannerRef}
                       inputClassName="exit-page__scanner placeholder:text-muted-foreground/80 md:text-2xl"
                       placeholder="Aguardando leitura ou digite o nome do produto…"
-                      disabled={catalog.products.isLoading || !unitId}
+                      disabled={
+                        catalog.products.isLoading ||
+                        !unitId ||
+                        movement.isPending
+                      }
                     />
                   </Field>
                 )}
@@ -582,11 +637,104 @@ function OperatorExitPage() {
                       product={selectedProduct}
                       mode="saida"
                       initialQuantity="1"
-                      actionLabel="Confirmar saída"
+                      actionLabel="Adicionar ao registro"
                       submitting={movement.isPending}
                       onCancel={() => setSelectedProduct(null)}
-                      onAdd={(item) => void recordExit(item)}
+                      onAdd={addPendingExitItem}
                     />
+                  </div>
+                )}
+
+                {pendingItems.length > 0 && (
+                  <div className="mt-5 rounded-xl border border-primary/20 bg-primary-soft/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">
+                          Itens neste registro ({pendingItems.length})
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Continue lendo ou pesquisando produtos. O estoque só
+                          será baixado ao confirmar o lote.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setPendingItems([]);
+                          setFormError(null);
+                          setSuccessMessage(null);
+                        }}
+                        disabled={movement.isPending}
+                      >
+                        <Trash2 /> Limpar lista
+                      </Button>
+                    </div>
+                    <div className="mt-3 divide-y rounded-lg border bg-card">
+                      {pendingItems.map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">
+                              {item.product.name}
+                            </p>
+                            <p className="font-mono text-xs text-muted-foreground">
+                              {item.product.barcode ??
+                                item.product.sku ??
+                                "Sem código"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="text-right text-sm tabular-nums">
+                              {item.releasedUnits != null
+                                ? `${item.releasedUnits} un. avulsas · ${item.quantity} ${unitShort(item.product.unit)}`
+                                : `${item.quantity} ${unitShort(item.product.unit)}`}
+                            </p>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Remover ${item.product.name} do registro`}
+                              onClick={() =>
+                                setPendingItems((current) =>
+                                  current.filter((row) => row.key !== item.key),
+                                )
+                              }
+                              disabled={movement.isPending}
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">
+                        {destination
+                          ? exitDestinationLabel(destination)
+                          : "Destino pendente"}
+                        {serviceCode
+                          ? ` · ${serviceName(serviceCode)}`
+                          : " · período pendente"}
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={() => void recordExit()}
+                        disabled={
+                          movement.isPending ||
+                          pendingItems.length === 0 ||
+                          !unitId ||
+                          selectedProduct !== null
+                        }
+                      >
+                        {movement.isPending
+                          ? "Registrando lote…"
+                          : `Confirmar saída (${pendingItems.length})`}
+                      </Button>
+                    </div>
                   </div>
                 )}
 
