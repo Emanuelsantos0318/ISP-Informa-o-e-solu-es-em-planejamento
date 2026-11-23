@@ -30,6 +30,7 @@ export type NavItem = {
   group: "operacao" | "relatorios" | "administracao";
   superAdminOnly?: boolean;
   operatorOnly?: boolean;
+  stockExitWorkflow?: boolean;
 };
 
 // Menu, permissões de exibição e títulos das rotas ficam definidos em uma única lista.
@@ -46,7 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Registrar saída",
     icon: ArrowLeftRight,
     group: "operacao",
-    operatorOnly: true,
+    stockExitWorkflow: true,
   },
   {
     to: "/cadastro",

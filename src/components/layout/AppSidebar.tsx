@@ -33,7 +33,11 @@ export function AppSidebar() {
     (item) =>
       (item.to !== "/" || profile?.role !== "operator") &&
       (!item.superAdminOnly || profile?.role === "super_admin") &&
-      (!item.operatorOnly || profile?.role === "operator"),
+      (!item.operatorOnly || profile?.role === "operator") &&
+      (!item.stockExitWorkflow ||
+        ["operator", "stock_manager", "admin", "super_admin"].includes(
+          profile?.role ?? "",
+        )),
   );
   const homePath = profile?.role === "operator" ? "/saida" : "/";
 

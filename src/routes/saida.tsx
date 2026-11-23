@@ -19,6 +19,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ProductPicker } from "@/components/movements/ProductPicker";
 import { ProductFormDialog } from "@/components/cadastro/ProductFormDialog";
 import { SelectedProductRow } from "@/components/movements/SelectedProductRow";
+import { StockExitPlanManager } from "@/components/planning/StockExitPlanManager";
 import { MovementActions } from "@/components/movements/MovementActions";
 import type { MovementRequest } from "@/components/movements/MovementActions";
 import { useAuth } from "@/lib/supabase/AuthProvider";
@@ -119,6 +120,7 @@ function OperatorExitPage() {
   const [pendingCreatedProductId, setPendingCreatedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pendingItems, setPendingItems] = useState<MovementItemDraft[]>([]);
+  const [exitPlanId, setExitPlanId] = useState<string | null>(null);
   const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(
     null,
   );
@@ -288,11 +290,17 @@ function OperatorExitPage() {
     );
   }, [productById]);
 
-  if (profile?.role !== "operator") {
+  const canUseExitWorkflow = [
+    "operator",
+    "stock_manager",
+    "admin",
+    "super_admin",
+  ].includes(profile?.role ?? "");
+  if (!canUseExitWorkflow) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <BackendNotice>
-          Esta aba está disponível somente para operadores.
+          Esta aba está disponível para operadores, gestores e administradores.
         </BackendNotice>
         <Button asChild variant="outline" className="self-start">
           <Link to="/">Voltar ao início</Link>
@@ -323,6 +331,36 @@ function OperatorExitPage() {
     window.requestAnimationFrame(() => scannerRef.current?.focus());
   };
 
+  // Preenche o lote em edição a partir do modelo diário selecionado.
+  const applyExitPlan = (plan: {
+    id: string;
+    name: string;
+    recipient: string;
+    notes: string | null;
+    products: Array<{ product: Product; quantity: number }>;
+  }) => {
+    if (pendingItems.length > 0 || selectedProduct) {
+      setFormError(
+        "Confirme ou limpe os itens atuais antes de carregar um modelo recorrente.",
+      );
+      return;
+    }
+    setPendingItems(
+      plan.products.map(({ product, quantity }) => ({
+        key: createUuid(),
+        product,
+        quantity,
+        plannedQuantity: quantity,
+      })),
+    );
+    setExitPlanId(plan.id);
+    setRecipient(plan.recipient);
+    setSuccessMessage(
+      `Modelo “${plan.name}” carregado. Revise quantidades e destino antes de confirmar.`,
+    );
+    setFormError(null);
+  };
+
   // Valida destino/período e envia todos os itens ao banco em uma operação atômica.
   const recordExit = async () => {
     if (pendingItems.length === 0) {
@@ -335,6 +373,12 @@ function OperatorExitPage() {
         behavior: "smooth",
         block: "center",
       });
+      return;
+    }
+    if (exitPlanId && !recipient.trim()) {
+      setFormError(
+        "Informe o responsável pela retirada para registrar o uso do modelo.",
+      );
       return;
     }
     const totalByProduct = new Map<string, number>();
@@ -385,9 +429,11 @@ function OperatorExitPage() {
         idempotencyKey: createUuid(),
         serviceCode: effectiveService,
         exitTypeCode: exitType,
+        exitPlanId,
         items: pendingItems.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
+          plannedQuantity: item.plannedQuantity,
           unitsReleased: item.releasedUnits,
           unitsPerPackage: item.releasedUnits
             ? item.product.unitsPerPackage
@@ -401,6 +447,7 @@ function OperatorExitPage() {
       );
       setSelectedProduct(null);
       setPendingItems([]);
+      setExitPlanId(null);
       setFormError(null);
     } catch (error) {
       setFormError(
@@ -486,6 +533,9 @@ function OperatorExitPage() {
                     />
                   </Field>
                 )}
+                <div className="mt-4">
+                  <StockExitPlanManager compact onStart={applyExitPlan} />
+                </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Clock3 className="size-4" /> Período sugerido agora:
@@ -663,6 +713,7 @@ function OperatorExitPage() {
                         variant="ghost"
                         onClick={() => {
                           setPendingItems([]);
+                          setExitPlanId(null);
                           setFormError(null);
                           setSuccessMessage(null);
                         }}
@@ -692,17 +743,30 @@ function OperatorExitPage() {
                               {item.releasedUnits != null
                                 ? `${item.releasedUnits} un. avulsas · ${item.quantity} ${unitShort(item.product.unit)}`
                                 : `${item.quantity} ${unitShort(item.product.unit)}`}
+                              {item.plannedQuantity != null && (
+                                <span className="block text-xs text-muted-foreground">
+                                  Previsto: {item.plannedQuantity}{" "}
+                                  {unitShort(item.product.unit)}
+                                </span>
+                              )}
                             </p>
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
                               aria-label={`Remover ${item.product.name} do registro`}
-                              onClick={() =>
-                                setPendingItems((current) =>
-                                  current.filter((row) => row.key !== item.key),
+                              onClick={() => {
+                                const next = pendingItems.filter(
+                                  (row) => row.key !== item.key,
+                                );
+                                setPendingItems(next);
+                                if (
+                                  !next.some(
+                                    (row) => row.plannedQuantity != null,
+                                  )
                                 )
-                              }
+                                  setExitPlanId(null);
+                              }}
                               disabled={movement.isPending}
                             >
                               <Trash2 className="size-4 text-destructive" />
