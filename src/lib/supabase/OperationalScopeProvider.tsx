@@ -51,42 +51,83 @@ export function OperationalScopeProvider({
     enabled: Boolean(client && profile),
   });
   const units = useMemo(() => unitsQuery.data ?? [], [unitsQuery.data]);
-  const canChooseUnit = Boolean(profile && profile.unit_id === null);
-  const unitId = profile?.unit_id ?? chosenUnitId;
+  const accessQuery = useQuery({
+    queryKey: ["profile-unit-access", profile?.user_id, profile?.company_id],
+    queryFn: async () => {
+      if (!client || !profile) return [];
+      const { data, error } = await client
+        .from("profile_unit_access")
+        .select("unit_id")
+        .eq("user_id", profile.user_id)
+        .eq("company_id", profile.company_id);
+      if (error) throw error;
+      return data.map((row) => row.unit_id);
+    },
+    enabled: Boolean(client && profile && profile.unit_id !== null),
+  });
+  const allowedUnitIds = useMemo(
+    () =>
+      profile?.unit_id === null
+        ? units.map((unit) => unit.id)
+        : [...new Set([profile?.unit_id, ...(accessQuery.data ?? [])])].filter(
+            (id): id is string => typeof id === "string",
+          ),
+    [profile?.unit_id, units, accessQuery.data],
+  );
+  const availableUnits = useMemo(
+    () => units.filter((unit) => allowedUnitIds.includes(unit.id)),
+    [units, allowedUnitIds],
+  );
+  const canChooseUnit = Boolean(profile && availableUnits.length > 1);
+  const unitId =
+    profile?.unit_id === null
+      ? chosenUnitId
+      : (availableUnits.find((unit) => unit.id === chosenUnitId)?.id ??
+        availableUnits[0]?.id ??
+        profile?.unit_id ??
+        null);
 
   useEffect(() => {
     // Administradores sem unidade fixa recuperam a última unidade escolhida, se ainda válida.
-    if (!profile || !canChooseUnit || units.length === 0) return;
+    if (!profile || !canChooseUnit || availableUnits.length === 0) return;
     const stored = window.localStorage.getItem(
       `isp.unit.${profile.company_id}`,
     );
-    const validStored = units.some((unit) => unit.id === stored);
-    const validChosen = units.some((unit) => unit.id === chosenUnitId);
+    const validStored = availableUnits.some((unit) => unit.id === stored);
+    const validChosen = availableUnits.some((unit) => unit.id === chosenUnitId);
     if (!validChosen) {
-      const next = validStored ? stored : units[0]?.id;
+      const next = validStored ? stored : availableUnits[0]?.id;
       if (next) setChosenUnitId(next);
     }
-  }, [profile, canChooseUnit, units, chosenUnitId]);
+  }, [profile, canChooseUnit, availableUnits, chosenUnitId]);
 
   const setUnitId = useCallback(
     (id: string) => {
       // Impede escolher unidade fora da lista liberada para a empresa.
-      if (!canChooseUnit || !units.some((unit) => unit.id === id)) return;
+      if (!canChooseUnit || !availableUnits.some((unit) => unit.id === id))
+        return;
       setChosenUnitId(id);
       if (profile)
         window.localStorage.setItem(`isp.unit.${profile.company_id}`, id);
     },
-    [canChooseUnit, units, profile],
+    [canChooseUnit, availableUnits, profile],
   );
   const value = useMemo(
     () => ({
       unitId,
-      units,
+      units: availableUnits,
       canChooseUnit,
       setUnitId,
-      loading: unitsQuery.isLoading,
+      loading: unitsQuery.isLoading || accessQuery.isLoading,
     }),
-    [unitId, units, canChooseUnit, setUnitId, unitsQuery.isLoading],
+    [
+      unitId,
+      availableUnits,
+      canChooseUnit,
+      setUnitId,
+      unitsQuery.isLoading,
+      accessQuery.isLoading,
+    ],
   );
   return (
     <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>

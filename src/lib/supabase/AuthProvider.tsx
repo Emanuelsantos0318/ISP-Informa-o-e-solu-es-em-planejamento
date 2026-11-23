@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Mantém sessão e perfil sincronizados em login, logout e renovação do token.
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, nextSession) => {
+      (event, nextSession) => {
         if (!active) return;
         setReady(false);
         // Defer network work outside Supabase's auth event callback.
@@ -111,6 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void loadProfile(nextSession).finally(() => {
             if (active) setReady(true);
           });
+          // Cada login autenticado gera um evento próprio para consulta administrativa.
+          if (event === "SIGNED_IN" && nextSession) {
+            void Promise.resolve(
+              supabase.rpc("record_own_access_event", {
+                p_user_agent: window.navigator.userAgent,
+              }),
+            ).catch(() => undefined);
+          }
         }, 0);
       },
     );

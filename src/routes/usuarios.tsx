@@ -10,6 +10,9 @@ import {
   UserPlus,
   Copy,
   Check,
+  Pencil,
+  KeyRound,
+  History,
 } from "lucide-react";
 import { PageIntro, Panel } from "@/components/common/Panel";
 import { BackendNotice } from "@/components/common/BackendNotice";
@@ -26,6 +29,15 @@ import {
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import type { ProfileRole } from "@/lib/supabase/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { formatDateTime } from "@/lib/datetime";
 
 export const Route = createFileRoute("/usuarios")({
   head: () => ({
@@ -117,6 +129,15 @@ function UsersPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editRole, setEditRole] = useState<ProfileRole>("operator");
+  const [editUnitIds, setEditUnitIds] = useState<string[]>([]);
+  const [editAllUnits, setEditAllUnits] = useState(false);
+  const [editStatus, setEditStatus] = useState<"active" | "inactive">("active");
+  const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [historyUserId, setHistoryUserId] = useState<string | null>(null);
   const canAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 
   const profilesQuery = useQuery({
@@ -132,9 +153,30 @@ function UsersPage() {
         .order("full_name")
         .limit(500);
       if (error) throw error;
+      const { data: accessRows, error: accessError } = await client
+        .from("profile_unit_access")
+        .select("user_id, unit_id")
+        .eq("company_id", profile.company_id)
+        .limit(5000);
+      if (accessError) throw accessError;
+      const accessByUser = new Map<string, string[]>();
+      for (const access of accessRows) {
+        const current = accessByUser.get(access.user_id) ?? [];
+        current.push(access.unit_id);
+        accessByUser.set(access.user_id, current);
+      }
       return data.map((row) => ({
         ...row,
         units: Array.isArray(row.units) ? (row.units[0] ?? null) : row.units,
+        unit_ids:
+          row.unit_id === null
+            ? null
+            : [
+                ...new Set([
+                  row.unit_id,
+                  ...(accessByUser.get(row.user_id) ?? []),
+                ]),
+              ],
       }));
     },
     enabled: Boolean(client && profile),
@@ -223,20 +265,20 @@ function UsersPage() {
       userId,
       fullName: name,
       role: nextRole,
-      unitId: nextUnit,
+      unitIds: nextUnits,
       status,
     }: {
       userId: string;
       fullName: string;
       role: ProfileRole;
-      unitId: string | null;
+      unitIds: string[] | null;
       status: "active" | "inactive";
     }) => {
       if (!client || !profile) throw new Error("Sessão não disponível.");
-      const { error } = await client.rpc("admin_assign_profile", {
+      const { error } = await client.rpc("admin_set_user_access", {
         p_user_id: userId,
         p_company_id: profile.company_id,
-        p_unit_id: nextUnit,
+        p_unit_ids: nextUnits,
         p_full_name: name,
         p_role: nextRole,
         p_status: status,
@@ -245,14 +287,22 @@ function UsersPage() {
         throw new Error(
           error.code === "42501"
             ? "A alteração não está autorizada para este escopo."
-            : "Não foi possível atualizar o perfil.",
+            : error.message || "Não foi possível atualizar o perfil.",
         );
     },
     onSuccess: async () => {
       setMessage("Perfil atualizado.");
       setErrorMessage(null);
+      setEditingUserId(null);
       await queryClient.invalidateQueries({
         queryKey: ["profiles", profile?.company_id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: [
+          "profile-unit-access",
+          profile?.user_id,
+          profile?.company_id,
+        ],
       });
     },
     onError: (error) =>
@@ -263,23 +313,66 @@ function UsersPage() {
       ),
   });
 
-  const edit = (
-    user: NonNullable<typeof profilesQuery.data>[number],
-    field: "role" | "unit_id",
-    value: string,
-  ) => {
+  const passwordMutation = useMutation({
+    mutationFn: async () => {
+      if (!client || !passwordUserId)
+        throw new Error("Selecione um usuário para alterar a senha.");
+      const { data, error } = await client.functions.invoke(
+        "admin-reset-user-password",
+        { body: { userId: passwordUserId, password: newPassword } },
+      );
+      if (error) throw new Error(await functionErrorMessage(error, data));
+      if (data?.error) throw new Error(data.error);
+      return data as { message: string };
+    },
+    onSuccess: (data) => {
+      setMessage(data.message);
+      setNewPassword("");
+      setPasswordUserId(null);
+      setErrorMessage(null);
+    },
+    onError: (error) =>
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível redefinir a senha.",
+      ),
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["user-access-history", profile?.company_id, historyUserId],
+    queryFn: async () => {
+      if (!client || !profile || !historyUserId) return [];
+      const { data, error } = await client
+        .from("user_access_history")
+        .select("id, occurred_at, user_agent")
+        .eq("company_id", profile.company_id)
+        .eq("user_id", historyUserId)
+        .order("occurred_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(client && profile && historyUserId),
+  });
+
+  const beginEdit = (user: NonNullable<typeof profilesQuery.data>[number]) => {
+    setEditingUserId(user.user_id);
+    setEditFullName(user.full_name);
+    setEditRole(user.role as ProfileRole);
+    setEditStatus(user.status as "active" | "inactive");
+    setEditAllUnits(user.unit_ids === null);
+    setEditUnitIds(user.unit_ids ?? []);
+  };
+
+  const saveUser = () => {
+    if (!editingUserId) return;
     updateMutation.mutate({
-      userId: user.user_id,
-      fullName: user.full_name,
-      role:
-        field === "role" ? (value as ProfileRole) : (user.role as ProfileRole),
-      unitId:
-        field === "unit_id"
-          ? value === "empresa"
-            ? null
-            : value
-          : user.unit_id,
-      status: user.status as "active" | "inactive",
+      userId: editingUserId,
+      fullName: editFullName.trim(),
+      role: editRole,
+      unitIds: editAllUnits ? null : editUnitIds,
+      status: editStatus,
     });
   };
 
@@ -519,7 +612,7 @@ function UsersPage() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[950px] text-left text-sm">
+            <table className="w-full min-w-[1050px] text-left text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   {[
@@ -527,7 +620,7 @@ function UsersPage() {
                     "Papel",
                     "Unidade",
                     "Status",
-                    "Acesso",
+                    "Ações",
                   ].map((label) => (
                     <th key={label} className="px-4 py-3 font-medium">
                       {label}
@@ -546,80 +639,56 @@ function UsersPage() {
                           : user.user_id.slice(0, 8)}
                       </span>
                     </td>
+                    <td className="px-4 py-3">{roleLabel(user.role)}</td>
                     <td className="px-4 py-3">
-                      {canAdmin && user.user_id !== profile?.user_id ? (
-                        <Select
-                          value={user.role}
-                          onValueChange={(value) => edit(user, "role", value)}
-                        >
-                          <SelectTrigger className="w-[190px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLES.map((item) => (
-                              <SelectItem key={item.value} value={item.value}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        roleLabel(user.role)
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {canAdmin && user.user_id !== profile?.user_id ? (
-                        <Select
-                          value={user.unit_id ?? "empresa"}
-                          onValueChange={(value) =>
-                            edit(user, "unit_id", value)
-                          }
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="empresa">
-                              Toda a empresa
-                            </SelectItem>
-                            {units.map((unit) => (
-                              <SelectItem key={unit.id} value={unit.id}>
-                                {unit.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        (user.units?.name ?? "Toda a empresa")
-                      )}
+                      {user.unit_ids === null
+                        ? "Todas as unidades"
+                        : user.unit_ids
+                            .map(
+                              (id) =>
+                                units.find((unit) => unit.id === id)?.name ??
+                                (id === user.unit_id
+                                  ? user.units?.name
+                                  : null) ??
+                                "Unidade vinculada",
+                            )
+                            .join(", ")}
                     </td>
                     <td className="px-4 py-3">
                       {user.status === "active" ? "Ativo" : "Inativo"}
                     </td>
                     <td className="px-4 py-3">
-                      {canAdmin && user.user_id !== profile?.user_id ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={updateMutation.isPending}
-                          onClick={() =>
-                            updateMutation.mutate({
-                              userId: user.user_id,
-                              fullName: user.full_name,
-                              role: user.role as ProfileRole,
-                              unitId: user.unit_id,
-                              status:
-                                user.status === "active"
-                                  ? "inactive"
-                                  : "active",
-                            })
-                          }
-                        >
-                          {user.status === "active" ? "Desativar" : "Reativar"}
-                        </Button>
-                      ) : (
-                        "—"
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {canAdmin ? (
+                          <>
+                            {user.user_id !== profile?.user_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => beginEdit(user)}
+                              >
+                                <Pencil className="size-4" /> Editar
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPasswordUserId(user.user_id)}
+                            >
+                              <KeyRound className="size-4" /> Senha
+                            </Button>
+                          </>
+                        ) : null}
+                        {canAdmin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setHistoryUserId(user.user_id)}
+                          >
+                            <History className="size-4" /> Histórico
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -636,6 +705,207 @@ function UsersPage() {
           </p>
         )}
       </Panel>
+      <Dialog
+        open={Boolean(editingUserId)}
+        onOpenChange={(open) => !open && setEditingUserId(null)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Editar usuário</DialogTitle>
+            <DialogDescription>
+              Atualize nome, papel, unidades vinculadas e situação da conta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <Field label="Nome completo" required>
+              <Input
+                maxLength={160}
+                value={editFullName}
+                onChange={(event) => setEditFullName(event.target.value)}
+              />
+            </Field>
+            <Field label="Perfil">
+              <Select
+                value={editRole}
+                onValueChange={(value) => setEditRole(value as ProfileRole)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.filter((item) => item.value !== "super_admin").map(
+                    (item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </Field>
+            {(profile?.unit_id === null || profile?.role === "super_admin") && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editAllUnits}
+                  onChange={(event) => setEditAllUnits(event.target.checked)}
+                />
+                Acesso a todas as unidades da empresa
+              </label>
+            )}
+            {!editAllUnits && (
+              <fieldset className="grid gap-2 rounded-md border p-3">
+                <legend className="px-1 text-sm font-medium">
+                  Unidades liberadas
+                </legend>
+                {units.map((unit) => (
+                  <label
+                    key={unit.id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={editUnitIds.includes(unit.id)}
+                      onChange={(event) =>
+                        setEditUnitIds((current) =>
+                          event.target.checked
+                            ? [...current, unit.id]
+                            : current.filter((id) => id !== unit.id),
+                        )
+                      }
+                    />
+                    {unit.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <Field label="Situação">
+              <Select
+                value={editStatus}
+                onValueChange={(value) =>
+                  setEditStatus(value as "active" | "inactive")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="inactive">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {updateMutation.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {errorMessage ?? updateMutation.error.message}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUserId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={
+                updateMutation.isPending ||
+                (!editAllUnits && editUnitIds.length === 0) ||
+                !editFullName.trim()
+              }
+              onClick={saveUser}
+            >
+              {updateMutation.isPending ? "Salvando…" : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(passwordUserId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPasswordUserId(null);
+            setNewPassword("");
+            passwordMutation.reset();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Redefinir senha</DialogTitle>
+            <DialogDescription>
+              A nova senha substitui a atual. Entregue-a diretamente ao usuário
+              por um canal seguro.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="Nova senha" required>
+            <Input
+              type="password"
+              minLength={8}
+              maxLength={72}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+          </Field>
+          {passwordMutation.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage ?? passwordMutation.error.message}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordUserId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={passwordMutation.isPending || newPassword.length < 8}
+              onClick={() => passwordMutation.mutate()}
+            >
+              {passwordMutation.isPending ? "Atualizando…" : "Alterar senha"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(historyUserId)}
+        onOpenChange={(open) => !open && setHistoryUserId(null)}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Histórico de acesso</DialogTitle>
+            <DialogDescription>
+              {profilesQuery.data?.find(
+                (user) => user.user_id === historyUserId,
+              )?.full_name ?? "Usuário"}{" "}
+              · últimos 100 logins registrados após a ativação do histórico.
+            </DialogDescription>
+          </DialogHeader>
+          {historyQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Carregando histórico…
+            </p>
+          ) : historyQuery.isError ? (
+            <p role="alert" className="text-sm text-destructive">
+              Não foi possível carregar o histórico para seu escopo.
+            </p>
+          ) : (historyQuery.data?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum login registrado desde a ativação do histórico.
+            </p>
+          ) : (
+            <ol className="grid gap-3">
+              {historyQuery.data?.map((entry) => (
+                <li key={entry.id} className="rounded-md border p-3">
+                  <p className="font-medium">
+                    {formatDateTime(entry.occurred_at)}
+                  </p>
+                  <p className="mt-1 break-words text-xs text-muted-foreground">
+                    {entry.user_agent || "Navegador não informado"}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
