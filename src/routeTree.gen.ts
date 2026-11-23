@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AceitarConviteRouteImport } from './routes/aceitar-convite'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ConhecaIspRouteImport } from './routes/conheca-isp'
 import { Route as MovimentacoesRouteImport } from './routes/movimentacoes'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as PerfilRouteImport } from './routes/perfil'
@@ -43,6 +44,11 @@ const CadastroRoute = CadastroRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConhecaIspRoute = ConhecaIspRouteImport.update({
+  id: '/conheca-isp',
+  path: '/conheca-isp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MovimentacoesRoute = MovimentacoesRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/aceitar-convite': typeof AceitarConviteRoute
   '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
   '/perfil': typeof PerfilRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
+    | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
     | '/perfil'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
+    | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
     | '/perfil'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/aceitar-convite'
     | '/cadastro'
     | '/configuracoes'
+    | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
     | '/perfil'
@@ -212,6 +224,7 @@ export interface RootRouteChildren {
   AceitarConviteRoute: typeof AceitarConviteRoute
   CadastroRoute: typeof CadastroRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  ConhecaIspRoute: typeof ConhecaIspRoute
   MovimentacoesRoute: typeof MovimentacoesRoute
   NotificacoesRoute: typeof NotificacoesRoute
   PerfilRoute: typeof PerfilRoute
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/conheca-isp': {
+      id: '/conheca-isp'
+      path: '/conheca-isp'
+      fullPath: '/conheca-isp'
+      preLoaderRoute: typeof ConhecaIspRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/movimentacoes': {
@@ -351,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   AceitarConviteRoute: AceitarConviteRoute,
   CadastroRoute: CadastroRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  ConhecaIspRoute: ConhecaIspRoute,
   MovimentacoesRoute: MovimentacoesRoute,
   NotificacoesRoute: NotificacoesRoute,
   PerfilRoute: PerfilRoute,

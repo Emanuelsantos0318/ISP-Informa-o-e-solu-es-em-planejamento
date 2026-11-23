@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/common/Field";
@@ -17,6 +17,7 @@ function PasswordResetPage() {
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
   const [busy, setBusy] = useState(false);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,7 @@ function PasswordResetPage() {
       hash.get("error_description") ?? query.get("error_description");
     if (urlError) {
       setError(
-        "O link de redefinição expirou ou não é válido. Solicite outro pela tela Meu Perfil.",
+        "O link de redefinição expirou ou não é válido. Volte ao acesso e solicite outro em “Esqueci minha senha”.",
       );
       return;
     }
@@ -39,7 +40,7 @@ function PasswordResetPage() {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else {
       setError(
-        "Abra o link mais recente enviado para seu e-mail. Se expirou, solicite outro pela tela Meu Perfil.",
+        "Abra o link mais recente enviado para seu e-mail. Se expirou, volte ao acesso e solicite outro em “Esqueci minha senha”.",
       );
     }
   }, [ready, session]);
@@ -103,20 +104,38 @@ function PasswordResetPage() {
               reutilizado.
             </p>
             <Field label="Nova senha" htmlFor="new-password" required>
-              <Input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showPasswords ? "text" : "password"}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  className="pr-11"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showPasswords ? "Ocultar senhas" : "Mostrar senhas"
+                  }
+                  aria-pressed={showPasswords}
+                  onClick={() => setShowPasswords((visible) => !visible)}
+                >
+                  {showPasswords ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
             </Field>
             <Field label="Confirme a senha" htmlFor="confirm-password" required>
               <Input
                 id="confirm-password"
-                type="password"
+                type={showPasswords ? "text" : "password"}
                 autoComplete="new-password"
                 minLength={8}
                 required
