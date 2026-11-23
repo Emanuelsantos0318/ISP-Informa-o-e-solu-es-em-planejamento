@@ -18,6 +18,9 @@ export function useMovementBatch() {
         queryClient.invalidateQueries({ queryKey: ["stock-invoices"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["inventory-snapshot"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["stock-exit-plan-history"],
+        }),
       ]);
     },
   });

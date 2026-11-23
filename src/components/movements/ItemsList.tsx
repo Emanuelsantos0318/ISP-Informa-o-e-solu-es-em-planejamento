@@ -2,15 +2,20 @@ import { PackageOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { unitShort } from "@/lib/config/units";
 import type { MovementItemDraft } from "@/lib/types";
+import { Input } from "@/components/ui/input";
 
 export function ItemsList({
   items,
   onRemove,
   showLot,
+  onQuantityChange,
+  showPlanned = false,
 }: {
   items: MovementItemDraft[];
   onRemove: (key: string) => void;
   showLot?: boolean;
+  onQuantityChange?: ((key: string, quantity: number) => void) | undefined;
+  showPlanned?: boolean | undefined;
 }) {
   if (items.length === 0) {
     return (
@@ -26,6 +31,9 @@ export function ItemsList({
         <thead className="bg-muted/60 text-xs text-muted-foreground">
           <tr>
             <th className="px-3 py-2 text-left font-medium">Produto</th>
+            {showPlanned && (
+              <th className="px-3 py-2 text-right font-medium">Previsto</th>
+            )}
             <th className="px-3 py-2 text-right font-medium">Quantidade</th>
             {showLot && (
               <th className="px-3 py-2 text-left font-medium">
@@ -44,8 +52,30 @@ export function ItemsList({
                   {i.product.sku}
                 </p>
               </td>
+              {showPlanned && (
+                <td className="px-3 py-2 text-right tabular">
+                  {i.plannedQuantity ?? "—"}{" "}
+                  {i.plannedQuantity != null ? unitShort(i.product.unit) : ""}
+                </td>
+              )}
               <td className="px-3 py-2 text-right tabular">
-                {i.releasedUnits != null ? (
+                {onQuantityChange ? (
+                  <div className="ml-auto flex max-w-40 items-center gap-2">
+                    <Input
+                      aria-label={`Quantidade de ${i.product.name}`}
+                      type="number"
+                      min="0.001"
+                      step="0.001"
+                      value={i.quantity}
+                      onChange={(event) =>
+                        onQuantityChange(i.key, Number(event.target.value))
+                      }
+                    />
+                    <span className="whitespace-nowrap">
+                      {unitShort(i.product.unit)}
+                    </span>
+                  </div>
+                ) : i.releasedUnits != null ? (
                   <span>
                     {i.releasedUnits} unidades ({i.quantity}{" "}
                     {unitShort(i.product.unit)})

@@ -27,7 +27,12 @@ import {
   PeriodFilter,
   type PeriodValue,
 } from "@/components/common/PeriodFilter";
-import { MovementActions } from "@/components/movements/MovementActions";
+import {
+  MovementActions,
+  type MovementRequest,
+} from "@/components/movements/MovementActions";
+import { StockExitPlanManager } from "@/components/planning/StockExitPlanManager";
+import { createUuid } from "@/lib/uuid";
 import {
   getPeriodRange,
   formatDateTime,
@@ -57,6 +62,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
+  const [movementRequest, setMovementRequest] =
+    useState<MovementRequest | null>(null);
   const [period, setPeriod] = useState<PeriodValue>({
     preset: "7d",
     from: "",
@@ -188,8 +195,21 @@ function Dashboard() {
             Supabase.
           </p>
         </div>
-        <MovementActions size="lg" />
+        <MovementActions size="lg" request={movementRequest} />
       </section>
+      <StockExitPlanManager
+        compact
+        onStart={(plan) => {
+          const firstProduct = plan.products[0]?.product;
+          if (!firstProduct) return;
+          setMovementRequest({
+            key: createUuid(),
+            product: firstProduct,
+            type: "exit",
+            exitPlan: plan,
+          });
+        }}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageIntro
           title="Resumo do estoque"

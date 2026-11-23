@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -11,6 +12,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Trash2,
 } from "lucide-react";
 import { PageIntro, Panel } from "@/components/common/Panel";
 import { EmptyTable } from "@/components/common/EmptyTable";
@@ -43,6 +45,17 @@ import { unitShort } from "@/lib/config/units";
 import { formatCnpj } from "@/lib/validation/cnpj";
 import type { CategoryRecord, SupplierRecord } from "@/lib/supabase/catalog";
 import { useAuth } from "@/lib/supabase/AuthProvider";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/cadastro")({
   head: () => ({
@@ -74,13 +87,19 @@ function CadastroPage() {
   const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(
     null,
   );
-  const [editingCategory, setEditingCategory] =
-    useState<CategoryRecord | null>(null);
-  const [editingSupplier, setEditingSupplier] =
-    useState<SupplierRecord | null>(null);
+  const [editingCategory, setEditingCategory] = useState<CategoryRecord | null>(
+    null,
+  );
+  const [editingSupplier, setEditingSupplier] = useState<SupplierRecord | null>(
+    null,
+  );
   const [movementRequest, setMovementRequest] =
     useState<MovementRequest | null>(null);
-  const { profile } = useAuth();
+  const [deletingProduct, setDeletingProduct] = useState<CatalogProduct | null>(
+    null,
+  );
+  const { profile, client } = useAuth();
+  const queryClient = useQueryClient();
   const canManageCatalog =
     profile !== null &&
     ["super_admin", "admin", "stock_manager"].includes(profile.role);
@@ -88,6 +107,36 @@ function CadastroPage() {
   const canCreateSuppliers = canManageCatalog || profile?.role === "operator";
   const canMoveStock = canEditProducts;
   const catalog = useCatalog({ includeInactiveProducts: true });
+  const deleteProductMutation = useMutation({
+    mutationFn: async (product: CatalogProduct) => {
+      if (!client) throw new Error("Conexão com o banco indisponível.");
+      const { data, error } = await client.rpc("delete_or_archive_product", {
+        p_product_id: product.id,
+      });
+      if (error) throw error;
+      if (data !== "deleted" && data !== "archived")
+        throw new Error("O banco não confirmou a exclusão do produto.");
+      return { data, product };
+    },
+    onSuccess: async ({ data, product }) => {
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success(
+        data === "deleted"
+          ? "Produto excluído"
+          : "Produto inativado para preservar o histórico",
+        {
+          description: product.name,
+        },
+      );
+      setDeletingProduct(null);
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o produto.",
+      ),
+  });
 
   useEffect(() => {
     // Restaura a última seção de cadastro aberta ao voltar para esta rota.
@@ -129,14 +178,17 @@ function CadastroPage() {
     ],
     actions: (
       <div className="flex items-center justify-end gap-2">
-        {canEditProducts && (product.status === "active" || canManageCatalog) && <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => setEditingProduct(product)}
-        >
-          <Pencil /> Editar
-        </Button>}
+        {canEditProducts &&
+          (product.status === "active" || canManageCatalog) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setEditingProduct(product)}
+            >
+              <Pencil /> Editar
+            </Button>
+          )}
         {canMoveStock && product.status === "active" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -169,6 +221,17 @@ function CadastroPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        )}
+        {canManageCatalog && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`Excluir ${product.name}`}
+            onClick={() => setDeletingProduct(product)}
+          >
+            <Trash2 className="text-destructive" />
+          </Button>
         )}
       </div>
     ),
@@ -224,15 +287,21 @@ function CadastroPage() {
         description="Produtos, categorias e fornecedores. Itens usados no histórico são inativados, nunca excluídos."
         actions={
           <>
-            {canManageCatalog && <Button variant="outline" onClick={() => setOpen("categorias")}>
-              <FolderTree /> Nova categoria
-            </Button>}
-            {canCreateSuppliers && <Button variant="outline" onClick={() => setOpen("fornecedores")}>
-              <Building2 /> Novo fornecedor
-            </Button>}
-            {canEditProducts && <Button onClick={() => setOpen("produtos")}>
-              <Plus /> Novo produto
-            </Button>}
+            {canManageCatalog && (
+              <Button variant="outline" onClick={() => setOpen("categorias")}>
+                <FolderTree /> Nova categoria
+              </Button>
+            )}
+            {canCreateSuppliers && (
+              <Button variant="outline" onClick={() => setOpen("fornecedores")}>
+                <Building2 /> Novo fornecedor
+              </Button>
+            )}
+            {canEditProducts && (
+              <Button onClick={() => setOpen("produtos")}>
+                <Plus /> Novo produto
+              </Button>
+            )}
           </>
         }
       />
@@ -339,6 +408,39 @@ function CadastroPage() {
         allowStatusChange={canManageCatalog}
       />
       <MovementActions hideButtons request={movementRequest} />
+      <AlertDialog
+        open={deletingProduct !== null}
+        onOpenChange={(open) => !open && setDeletingProduct(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este produto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deletingProduct?.name}</strong> será excluído se não
+              houver histórico associado. Se houver movimentações ou
+              referências, o sistema apenas o inativará para preservar o
+              histórico e impedir novas saídas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteProductMutation.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteProductMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (deletingProduct)
+                  deleteProductMutation.mutate(deletingProduct);
+              }}
+            >
+              {deleteProductMutation.isPending
+                ? "Verificando histórico…"
+                : "Confirmar exclusão"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <CategoryFormDialog
         open={open === "categorias" || editingCategory !== null}
         category={editingCategory}
@@ -446,11 +548,13 @@ function ListPanel({
               ? "Nenhum registro corresponde aos filtros."
               : "Os registros aparecerão aqui após serem salvos."
           }
-          action={canCreate ? (
-            <Button size="sm" variant="outline" onClick={onCreate}>
-              <Plus /> {createLabel}
-            </Button>
-          ) : undefined}
+          action={
+            canCreate ? (
+              <Button size="sm" variant="outline" onClick={onCreate}>
+                <Plus /> {createLabel}
+              </Button>
+            ) : undefined
+          }
           columns={columns.map((label) => ({ label }))}
         />
       ) : (

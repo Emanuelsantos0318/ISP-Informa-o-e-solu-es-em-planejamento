@@ -57,7 +57,13 @@ import { createUuid } from "@/lib/uuid";
 import { toast } from "sonner";
 import { useOperationalSettings } from "@/lib/supabase/useOperationalSettings";
 import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-settings";
-import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
+import { useStockExitPlans } from "@/lib/supabase/useStockExitPlans";
+import type { ExitPlanPrefill } from "./MovementActions";
+import {
+  clearSessionDraft,
+  readSessionDraft,
+  writeSessionDraft,
+} from "@/lib/session-draft";
 
 export function ExitDialog({
   open,
@@ -65,17 +71,20 @@ export function ExitDialog({
   initialProduct,
   simplified = false,
   draftKey,
+  initialPlan,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   initialProduct?: Product | undefined;
   simplified?: boolean | undefined;
   draftKey?: string | undefined;
+  initialPlan?: ExitPlanPrefill | null | undefined;
 }) {
   const catalog = useCatalog();
   const { unitId } = useOperationalScope();
   const movement = useMovementBatch();
   const operationalQuery = useOperationalSettings();
+  const exitPlansQuery = useStockExitPlans();
   const operational = operationalQuery.data ?? DEFAULT_OPERATIONAL_SETTINGS;
   const operationalRulesRef = useRef(operational.serviceTimeRules);
   operationalRulesRef.current = operational.serviceTimeRules;
@@ -93,6 +102,8 @@ export function ExitDialog({
   const [notes, setNotes] = useState("");
   const [destination, setDestination] = useState("");
   const [recipient, setRecipient] = useState("");
+  const [exitPlanId, setExitPlanId] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -113,28 +124,39 @@ export function ExitDialog({
         suggestServiceForTime(now.time, operationalRulesRef.current),
       ).selection,
     );
-    setItems([]);
+    setItems(
+      initialPlan?.products.map(({ product, quantity }) => ({
+        key: createUuid(),
+        product,
+        quantity,
+        plannedQuantity: quantity,
+      })) ?? [],
+    );
     setSelected(initialProduct ?? null);
-    setNotes("");
+    setNotes(initialPlan?.notes ?? "");
     setDestination("");
-    setRecipient("");
+    setRecipient(initialPlan?.recipient ?? "");
+    setExitPlanId(initialPlan?.id ?? null);
+    setSelectedPlanId(initialPlan?.id ?? "");
     setErrors([]);
     setIdempotencyKey(null);
     setSubmitError(null);
-    const saved = draftKey
-      ? readSessionDraft<{
-          date?: string;
-          time?: string;
-          exitType?: ExitTypeCode | "";
-          selection?: ServiceSelection;
-          items?: MovementItemDraft[];
-          selected?: Product | null;
-          notes?: string;
-          destination?: string;
-          recipient?: string;
-          idempotencyKey?: string | null;
-        }>(draftKey)
-      : null;
+    const saved =
+      !initialPlan && draftKey
+        ? readSessionDraft<{
+            date?: string;
+            time?: string;
+            exitType?: ExitTypeCode | "";
+            selection?: ServiceSelection;
+            items?: MovementItemDraft[];
+            selected?: Product | null;
+            notes?: string;
+            destination?: string;
+            recipient?: string;
+            exitPlanId?: string | null;
+            idempotencyKey?: string | null;
+          }>(draftKey)
+        : null;
     if (saved) {
       if (saved.date !== undefined) setDate(saved.date);
       if (saved.time !== undefined) setTime(saved.time);
@@ -145,11 +167,12 @@ export function ExitDialog({
       if (saved.notes !== undefined) setNotes(saved.notes);
       if (saved.destination !== undefined) setDestination(saved.destination);
       if (saved.recipient !== undefined) setRecipient(saved.recipient);
+      if (saved.exitPlanId !== undefined) setExitPlanId(saved.exitPlanId);
       if (saved.idempotencyKey !== undefined)
         setIdempotencyKey(saved.idempotencyKey);
     }
     setDraftHydrated(true);
-  }, [open, initialProduct, draftKey]);
+  }, [open, initialProduct, draftKey, initialPlan]);
 
   useEffect(() => {
     if (!open || !draftHydrated || !draftKey) return;
@@ -163,6 +186,7 @@ export function ExitDialog({
       notes,
       destination,
       recipient,
+      exitPlanId,
       idempotencyKey,
     });
   }, [
@@ -176,6 +200,7 @@ export function ExitDialog({
     notes,
     open,
     recipient,
+    exitPlanId,
     selected,
     selection,
     time,
@@ -224,14 +249,78 @@ export function ExitDialog({
   const pickService = (code: ServiceCode) =>
     setSelection(selectServiceManually(code));
 
+  const applyExitPlan = (planId: string) => {
+    const plan = (exitPlansQuery.data ?? []).find((item) => item.id === planId);
+    if (!plan) return;
+    const productById = new Map(
+      (catalog.products.data ?? []).map((product) => [product.id, product]),
+    );
+    const nextItems = plan.items.flatMap((item) => {
+      const product = productById.get(item.product_id);
+      if (!product || product.unit !== item.unit_of_measure_snapshot) return [];
+      return [
+        {
+          key: createUuid(),
+          product,
+          quantity: item.planned_quantity,
+          plannedQuantity: item.planned_quantity,
+        },
+      ];
+    });
+    if (nextItems.length !== plan.items.length) {
+      toast.error(
+        "Um produto do modelo foi inativado ou teve a unidade alterada. Atualize o modelo antes de usá-lo.",
+      );
+      return;
+    }
+    setItems(nextItems);
+    setSelected(null);
+    setRecipient(plan.recipient);
+    setNotes(plan.notes ?? "");
+    setExitPlanId(plan.id);
+    setIdempotencyKey(null);
+    toast.success("Modelo carregado", {
+      description: `${plan.name} · ${plan.items.length} produto(s)`,
+    });
+  };
+
   const confirm = async () => {
     const errs: string[] = [];
     if (!date || !time)
       errs.push("Informe a data e hor\u00e1rio da sa\u00edda.");
     if (!exitType) errs.push("Selecione o tipo de sa\u00edda.");
+    if (exitPlanId && !recipient.trim())
+      errs.push(
+        "Informe o responsável pela retirada para registrar o uso do modelo.",
+      );
     const serviceError = validateServiceSelection(selection.value);
     if (serviceError) errs.push(serviceError);
     if (items.length === 0) errs.push("Inclua ao menos um produto.");
+    if (
+      items.some(
+        (item) =>
+          !Number.isFinite(item.quantity) ||
+          item.quantity <= 0 ||
+          item.quantity > item.product.balance ||
+          Number(item.quantity.toFixed(3)) !== item.quantity,
+      )
+    )
+      errs.push(
+        "Confira as quantidades: precisam ser positivas, ter até três casas decimais e respeitar o saldo disponível.",
+      );
+    const totalsByProduct = new Map<string, number>();
+    for (const item of items)
+      totalsByProduct.set(
+        item.product.id,
+        (totalsByProduct.get(item.product.id) ?? 0) + item.quantity,
+      );
+    if (
+      items.some(
+        (item) =>
+          (totalsByProduct.get(item.product.id) ?? 0) > item.product.balance,
+      )
+    )
+      errs.push("A quantidade total de um produto excede o saldo disponível.");
     if (!unitId) errs.push("Selecione uma unidade ativa.");
     const operationalAt = operationalDateTimeToIso(date, time);
     if (!operationalAt)
@@ -257,6 +346,7 @@ export function ExitDialog({
         serviceCode: selection.value,
         exitTypeCode: exitType,
         note: notes,
+        exitPlanId,
         items: items.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
@@ -268,10 +358,11 @@ export function ExitDialog({
           recipient: recipient.trim() || null,
           lotNumber: item.lot,
           expiresOn: item.expiry,
+          plannedQuantity: item.plannedQuantity,
         })),
       });
       toast.success("Saída registrada", {
-        description: `${items.length} item(ns) foram baixados do estoque e adicionados a Movimentações.`,
+        description: `${items.length} produto(s) registrados em uma operação; as quantidades ficaram disponíveis em Movimentações.`,
       });
       setIdempotencyKey(null);
       onOpenChange(false);
@@ -440,6 +531,68 @@ export function ExitDialog({
         )}
 
         <div className="flex flex-col gap-2">
+          <div className="rounded-md border border-primary/20 bg-primary-soft/30 p-3">
+            <Field label="Saída recorrente (opcional)">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Select
+                  value={selectedPlanId}
+                  onValueChange={setSelectedPlanId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha um modelo diário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(exitPlansQuery.data ?? []).map((plan) => (
+                      <SelectItem value={plan.id} key={plan.id}>
+                        {plan.name} · {plan.recipient} · {plan.items.length}{" "}
+                        item(ns)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    !selectedPlanId ||
+                    exitPlansQuery.isLoading ||
+                    catalog.products.isLoading
+                  }
+                  onClick={() => applyExitPlan(selectedPlanId)}
+                >
+                  Carregar modelo
+                </Button>
+              </div>
+            </Field>
+            {exitPlanId && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  As quantidades previstas são apenas uma sugestão. Revise cada
+                  item antes de confirmar.
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setExitPlanId(null);
+                    setSelectedPlanId("");
+                    setItems((current) =>
+                      current.map((item) => {
+                        const {
+                          plannedQuantity: _plannedQuantity,
+                          ...withoutPlan
+                        } = item;
+                        return withoutPlan;
+                      }),
+                    );
+                  }}
+                >
+                  Desvincular modelo
+                </Button>
+              </div>
+            )}
+          </div>
           <span className="text-xs font-medium text-foreground/80">
             Produtos
           </span>
@@ -475,6 +628,16 @@ export function ExitDialog({
           )}
           <ItemsList
             items={items}
+            showPlanned={exitPlanId !== null}
+            onQuantityChange={(key, quantity) =>
+              setItems((current) =>
+                current.map((item) =>
+                  item.key === key
+                    ? { ...item, quantity, releasedUnits: undefined }
+                    : item,
+                ),
+              )
+            }
             onRemove={(k) => setItems((cur) => cur.filter((i) => i.key !== k))}
           />
         </div>

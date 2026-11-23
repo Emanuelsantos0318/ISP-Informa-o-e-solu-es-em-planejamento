@@ -8,12 +8,22 @@ import { StockCorrectionDialog } from "./StockCorrectionDialog";
 import { Scale } from "lucide-react";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
-import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
+import {
+  clearSessionDraft,
+  readSessionDraft,
+  writeSessionDraft,
+} from "@/lib/session-draft";
+import type { StockExitPlan } from "@/lib/supabase/stock-exit-plans";
+
+export type ExitPlanPrefill = StockExitPlan & {
+  products: Array<{ product: Product; quantity: number }>;
+};
 
 export type MovementRequest = {
   key: string;
   product: Product;
   type: "entry" | "exit";
+  exitPlan?: ExitPlanPrefill | undefined;
 };
 
 /** Single owner for entry and exit dialogs across the app. */
@@ -34,6 +44,8 @@ export function MovementActions({
   const [exitOpen, setExitOpen] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [initialProduct, setInitialProduct] = useState<Product | undefined>();
+  const [initialExitPlan, setInitialExitPlan] =
+    useState<ExitPlanPrefill | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const { profile } = useAuth();
   const { unitId } = useOperationalScope();
@@ -46,7 +58,8 @@ export function MovementActions({
 
   useEffect(() => {
     if (!request) return;
-    setInitialProduct(request.product);
+    setInitialProduct(request.exitPlan ? undefined : request.product);
+    setInitialExitPlan(request.exitPlan ?? null);
     if (request.type === "entry") setEntryOpen(true);
     else setExitOpen(true);
   }, [request]);
@@ -81,9 +94,20 @@ export function MovementActions({
           ? "correction"
           : null;
     if (type)
-      writeSessionDraft(`${draftPrefix}.open`, { type, product: initialProduct });
+      writeSessionDraft(`${draftPrefix}.open`, {
+        type,
+        product: initialProduct,
+      });
     else clearSessionDraft(`${draftPrefix}.open`);
-  }, [correctionOpen, draftPrefix, draftRestored, entryOpen, exitOpen, initialProduct, request]);
+  }, [
+    correctionOpen,
+    draftPrefix,
+    draftRestored,
+    entryOpen,
+    exitOpen,
+    initialProduct,
+    request,
+  ]);
 
   const closeEntry = (open: boolean) => {
     setEntryOpen(open);
@@ -91,7 +115,10 @@ export function MovementActions({
   };
   const closeExit = (open: boolean) => {
     setExitOpen(open);
-    if (!open) clearSessionDraft(`${draftPrefix}.exit`);
+    if (!open) {
+      clearSessionDraft(`${draftPrefix}.exit`);
+      setInitialExitPlan(null);
+    }
   };
   const closeCorrection = (open: boolean) => {
     setCorrectionOpen(open);
@@ -140,6 +167,7 @@ export function MovementActions({
         initialProduct={initialProduct}
         simplified={simplifiedExit}
         draftKey={`${draftPrefix}.exit`}
+        initialPlan={initialExitPlan}
       />
       <StockCorrectionDialog
         open={correctionOpen}

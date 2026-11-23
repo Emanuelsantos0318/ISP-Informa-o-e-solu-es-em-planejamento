@@ -17,6 +17,7 @@ export type MovementItemDraft = {
   key: string;
   product: Product;
   quantity: number;
+  plannedQuantity?: number | undefined;
   releasedUnits?: number | undefined;
   lot?: string | undefined;
   expiry?: string | undefined;

@@ -6,6 +6,7 @@ export type MovementBatchItem = {
   quantity: number;
   unitsReleased?: number | undefined;
   unitsPerPackage?: number | null | undefined;
+  plannedQuantity?: number | undefined;
   destination?: string | null | undefined;
   recipient?: string | null | undefined;
   lotNumber?: string | undefined;
@@ -26,6 +27,7 @@ export type MovementBatchInput = {
   supplierId?: string | null | undefined;
   sourceReference?: string | null | undefined;
   note?: string | null | undefined;
+  exitPlanId?: string | null | undefined;
   invoice?:
     | {
         accessKey: string | null;
@@ -68,6 +70,8 @@ export async function recordMovementBatch(
     p_items: input.items.map((item) => ({
       product_id: item.productId,
       quantity: item.quantity,
+      planned_quantity: item.plannedQuantity ?? null,
+      exit_plan_id: input.exitPlanId ?? null,
       units_released: item.unitsReleased ?? null,
       units_per_package: item.unitsPerPackage ?? null,
       destination: item.destination ?? null,

@@ -49,6 +49,12 @@ import { DEFAULT_OPERATIONAL_SETTINGS } from "@/lib/supabase/operational-setting
 import { EXIT_TYPES, SERVICE_OPTIONS } from "@/lib/config/services";
 import type { MovementBatch, InventoryProduct } from "@/lib/supabase/inventory";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
+import { StockExitPlanManager } from "@/components/planning/StockExitPlanManager";
+import {
+  MovementActions,
+  type MovementRequest,
+} from "@/components/movements/MovementActions";
+import { createUuid } from "@/lib/uuid";
 
 export const Route = createFileRoute("/planejamento")({
   head: () => ({
@@ -120,6 +126,8 @@ type ReportKey = (typeof REPORTS)[number]["key"];
 type ReportRow = Record<string, string | number>;
 
 function PlanningPage() {
+  const [movementRequest, setMovementRequest] =
+    useState<MovementRequest | null>(null);
   const scope = useOperationalScope();
   const catalog = useCatalog();
   const defaultRange = getPeriodRange("30d");
@@ -500,6 +508,19 @@ function PlanningPage() {
         title="Planejamento"
         description="Consumo, cobertura e reposição sugerida a partir das movimentações reais. Sugestões apoiam a decisão; nenhum pedido é enviado automaticamente."
       />
+      <StockExitPlanManager
+        onStart={(plan) => {
+          const firstProduct = plan.products[0]?.product;
+          if (!firstProduct) return;
+          setMovementRequest({
+            key: createUuid(),
+            product: firstProduct,
+            type: "exit",
+            exitPlan: plan,
+          });
+        }}
+      />
+      <MovementActions hideButtons request={movementRequest} />
       {snapshot.isLoading && (
         <BackendNotice>Carregando dados de estoque e movimentos…</BackendNotice>
       )}
