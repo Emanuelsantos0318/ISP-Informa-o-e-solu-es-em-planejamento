@@ -13,6 +13,9 @@ import {
   Pencil,
   KeyRound,
   History,
+  Mail,
+  RefreshCw,
+  Send,
 } from "lucide-react";
 import { PageIntro, Panel } from "@/components/common/Panel";
 import { BackendNotice } from "@/components/common/BackendNotice";
@@ -131,6 +134,7 @@ function UsersPage() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editFullName, setEditFullName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState<ProfileRole>("operator");
   const [editUnitIds, setEditUnitIds] = useState<string[]>([]);
   const [editAllUnits, setEditAllUnits] = useState(false);
@@ -138,7 +142,44 @@ function UsersPage() {
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [historyUserId, setHistoryUserId] = useState<string | null>(null);
+  const [adminActionResult, setAdminActionResult] = useState<{
+    message: string;
+    inviteUrl?: string;
+    currentEmailLink?: string;
+    newEmailLink?: string;
+    currentEmail?: string;
+    newEmail?: string;
+  } | null>(null);
   const canAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+
+  const userDetailsQuery = useQuery({
+    queryKey: ["admin-user-details", editingUserId],
+    queryFn: async () => {
+      if (!client || !editingUserId)
+        throw new Error("Usuário não selecionado.");
+      const { data, error } = await client.functions.invoke(
+        "admin-manage-user",
+        {
+          body: { action: "details", userId: editingUserId },
+        },
+      );
+      if (error) throw new Error(await functionErrorMessage(error, data));
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        email: string | null;
+        emailConfirmed: boolean;
+        invitedAt: string | null;
+        lastSignInAt: string | null;
+        accountType: "email" | "username";
+      };
+    },
+    enabled: Boolean(client && editingUserId && canAdmin),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (userDetailsQuery.data) setEditEmail(userDetailsQuery.data.email ?? "");
+  }, [userDetailsQuery.data]);
 
   const profilesQuery = useQuery({
     queryKey: ["profiles", profile?.company_id],
@@ -339,6 +380,38 @@ function UsersPage() {
       ),
   });
 
+  const adminActionMutation = useMutation({
+    mutationFn: async (input: {
+      action: "resend_invite" | "send_recovery" | "change_email";
+      userId: string;
+      newEmail?: string;
+    }) => {
+      if (!client) throw new Error("Supabase não está configurado.");
+      const { data, error } = await client.functions.invoke(
+        "admin-manage-user",
+        {
+          body: input,
+        },
+      );
+      if (error) throw new Error(await functionErrorMessage(error, data));
+      if (data?.error) throw new Error(data.error);
+      return data as NonNullable<typeof adminActionResult>;
+    },
+    onSuccess: (data) => {
+      setAdminActionResult(data);
+      setMessage(null);
+      setErrorMessage(null);
+    },
+    onError: (error) => {
+      setAdminActionResult(null);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível concluir a ação.",
+      );
+    },
+  });
+
   const historyQuery = useQuery({
     queryKey: ["user-access-history", profile?.company_id, historyUserId],
     queryFn: async () => {
@@ -357,7 +430,10 @@ function UsersPage() {
   });
 
   const beginEdit = (user: NonNullable<typeof profilesQuery.data>[number]) => {
+    setAdminActionResult(null);
+    setErrorMessage(null);
     setEditingUserId(user.user_id);
+    setEditEmail("");
     setEditFullName(user.full_name);
     setEditRole(user.role as ProfileRole);
     setEditStatus(user.status as "active" | "inactive");
@@ -707,13 +783,19 @@ function UsersPage() {
       </Panel>
       <Dialog
         open={Boolean(editingUserId)}
-        onOpenChange={(open) => !open && setEditingUserId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingUserId(null);
+            setAdminActionResult(null);
+            setErrorMessage(null);
+          }
+        }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Editar usuário</DialogTitle>
             <DialogDescription>
-              Atualize nome, papel, unidades vinculadas e situação da conta.
+              Administre perfil, e-mail, convites e recuperação de acesso.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -724,6 +806,60 @@ function UsersPage() {
                 onChange={(event) => setEditFullName(event.target.value)}
               />
             </Field>
+            <Field label="E-mail de acesso">
+              <Input
+                type="email"
+                autoComplete="email"
+                value={editEmail}
+                onChange={(event) => setEditEmail(event.target.value)}
+                disabled={
+                  userDetailsQuery.isLoading ||
+                  userDetailsQuery.data?.accountType === "username"
+                }
+                placeholder={
+                  userDetailsQuery.isLoading
+                    ? "Carregando…"
+                    : "Conta sem e-mail"
+                }
+              />
+              <span className="text-xs text-muted-foreground">
+                A conta só muda após confirmar o endereço atual e o novo.
+              </span>
+            </Field>
+            {userDetailsQuery.data && (
+              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <p>
+                  Situação do e-mail:{" "}
+                  {userDetailsQuery.data.accountType === "username"
+                    ? "conta sem e-mail"
+                    : userDetailsQuery.data.emailConfirmed
+                      ? "confirmado"
+                      : "aguardando confirmação"}
+                </p>
+                {userDetailsQuery.data.invitedAt && (
+                  <p className="mt-1">
+                    Convite criado:{" "}
+                    {formatDateTime(userDetailsQuery.data.invitedAt)}
+                  </p>
+                )}
+                {userDetailsQuery.data.lastSignInAt && (
+                  <p className="mt-1">
+                    Último acesso:{" "}
+                    {formatDateTime(userDetailsQuery.data.lastSignInAt)}
+                  </p>
+                )}
+                {!userDetailsQuery.data.lastSignInAt && (
+                  <p className="mt-1">
+                    Ainda não há acesso registrado para esta conta.
+                  </p>
+                )}
+              </div>
+            )}
+            {userDetailsQuery.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {userDetailsQuery.error.message}
+              </p>
+            )}
             <Field label="Perfil">
               <Select
                 value={editRole}
@@ -800,6 +936,44 @@ function UsersPage() {
                 {errorMessage ?? updateMutation.error.message}
               </p>
             )}
+            {adminActionMutation.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {errorMessage ?? adminActionMutation.error.message}
+              </p>
+            )}
+            {adminActionResult && (
+              <div
+                role="status"
+                className="grid gap-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"
+              >
+                <p>{adminActionResult.message}</p>
+                {adminActionResult.inviteUrl && (
+                  <CopyableLink
+                    label="Novo link de convite"
+                    value={adminActionResult.inviteUrl}
+                  />
+                )}
+                {adminActionResult.currentEmailLink && (
+                  <CopyableLink
+                    label={`Confirmação no e-mail atual (${adminActionResult.currentEmail ?? ""})`}
+                    value={adminActionResult.currentEmailLink}
+                  />
+                )}
+                {adminActionResult.newEmailLink && (
+                  <CopyableLink
+                    label={`Confirmação no novo e-mail (${adminActionResult.newEmail ?? ""})`}
+                    value={adminActionResult.newEmailLink}
+                  />
+                )}
+              </div>
+            )}
+            {errorMessage &&
+              !updateMutation.isError &&
+              !adminActionMutation.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage}
+                </p>
+              )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUserId(null)}>
@@ -816,6 +990,71 @@ function UsersPage() {
               {updateMutation.isPending ? "Salvando…" : "Salvar alterações"}
             </Button>
           </DialogFooter>
+          <div className="grid gap-2 border-t pt-4 sm:grid-cols-2">
+            {userDetailsQuery.data?.accountType === "email" &&
+              !userDetailsQuery.data.emailConfirmed && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={adminActionMutation.isPending}
+                  onClick={() =>
+                    editingUserId &&
+                    adminActionMutation.mutate({
+                      action: "resend_invite",
+                      userId: editingUserId,
+                    })
+                  }
+                >
+                  <RefreshCw className="size-4" /> Reenviar convite
+                </Button>
+              )}
+            {userDetailsQuery.data?.accountType === "email" && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={adminActionMutation.isPending}
+                onClick={() =>
+                  editingUserId &&
+                  adminActionMutation.mutate({
+                    action: "send_recovery",
+                    userId: editingUserId,
+                  })
+                }
+              >
+                <Send className="size-4" /> Enviar link de senha
+              </Button>
+            )}
+            {userDetailsQuery.data?.accountType === "email" &&
+              editEmail.trim().toLowerCase() !==
+                userDetailsQuery.data.email && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="sm:col-span-2"
+                  disabled={adminActionMutation.isPending || !editEmail.trim()}
+                  onClick={() =>
+                    editingUserId &&
+                    adminActionMutation.mutate({
+                      action: "change_email",
+                      userId: editingUserId,
+                      newEmail: editEmail,
+                    })
+                  }
+                >
+                  <Mail className="size-4" /> Gerar confirmação de novo e-mail
+                </Button>
+              )}
+            {adminActionMutation.isPending && (
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Processando solicitação…
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Os links gerados são de uso único. A alteração de e-mail requer
+              confirmação nos dois endereços; encaminhe cada link ao respectivo
+              titular.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog
@@ -906,6 +1145,33 @@ function UsersPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CopyableLink({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+      <label className="grid gap-1 text-xs font-medium">
+        {label}
+        <Input
+          readOnly
+          value={value}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      </label>
+      <Button
+        type="button"
+        variant="outline"
+        className="self-end"
+        onClick={() =>
+          void navigator.clipboard.writeText(value).then(() => setCopied(true))
+        }
+      >
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+        {copied ? "Copiado" : "Copiar"}
+      </Button>
     </div>
   );
 }

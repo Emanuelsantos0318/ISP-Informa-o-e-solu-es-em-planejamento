@@ -13,6 +13,9 @@ verify_jwt = true
 [functions.admin-reset-user-password]
 verify_jwt = true
 
+[functions.admin-manage-user]
+verify_jwt = true
+
 [functions.danfe-vision-ocr]
 verify_jwt = true
 
