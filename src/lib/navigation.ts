@@ -15,6 +15,7 @@ import {
 export type NavItem = {
   to:
     | "/"
+    | "/painel-geral"
     | "/movimentacoes"
     | "/saida"
     | "/cadastro"
@@ -29,6 +30,7 @@ export type NavItem = {
   icon: LucideIcon;
   group: "operacao" | "relatorios" | "administracao";
   superAdminOnly?: boolean;
+  adminOnly?: boolean;
   operatorOnly?: boolean;
   stockExitWorkflow?: boolean;
 };
@@ -36,6 +38,13 @@ export type NavItem = {
 // Menu, permissões de exibição e títulos das rotas ficam definidos em uma única lista.
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Início", icon: LayoutDashboard, group: "operacao" },
+  {
+    to: "/painel-geral",
+    label: "Painel geral",
+    icon: Building2,
+    group: "operacao",
+    adminOnly: true,
+  },
   {
     to: "/movimentacoes",
     label: "Movimentações",

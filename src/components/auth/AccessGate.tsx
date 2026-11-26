@@ -15,6 +15,8 @@ import { Field } from "@/components/common/Field";
 import { AppShell } from "@/components/layout/AppShell";
 import { OperationalScopeProvider } from "@/lib/supabase/OperationalScopeProvider";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
+import { Building2, LayoutDashboard } from "lucide-react";
 
 /** Decide entre configuração pendente, login, rotas públicas e área autenticada. */
 export function AccessGate({ children }: { children: ReactNode }) {
@@ -73,7 +75,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   if (session && profile)
     return (
       <OperationalScopeProvider>
-        <AppShell>{children}</AppShell>
+        <SignedInArea>{children}</SignedInArea>
       </OperationalScopeProvider>
     );
   if (session && profileError) {
@@ -255,6 +257,118 @@ export function AccessGate({ children }: { children: ReactNode }) {
       </section>
     </main>
   );
+}
+
+function SignedInArea({ children }: { children: ReactNode }) {
+  const { client, profile } = useAuth();
+  const { units, unitId, loading, setUnitId } = useOperationalScope();
+  const router = useRouter();
+  const [selectionChecked, setSelectionChecked] = useState(false);
+  const [selectionRequired, setSelectionRequired] = useState(false);
+
+  useEffect(() => {
+    if (!profile || loading) return;
+    const key = `isp.unit-selection.${profile.user_id}`;
+    const selectedForSession = window.sessionStorage.getItem(key) === "true";
+    setSelectionRequired(units.length > 1 && !selectedForSession);
+    setSelectionChecked(true);
+  }, [profile, units.length, loading]);
+
+  const chooseUnit = (id: string) => {
+    setUnitId(id);
+    if (profile)
+      window.sessionStorage.setItem(
+        `isp.unit-selection.${profile.user_id}`,
+        "true",
+      );
+    setSelectionRequired(false);
+    void router.navigate({ to: profile?.role === "operator" ? "/saida" : "/" });
+  };
+
+  if (!selectionChecked || loading)
+    return (
+      <Message
+        title="Preparando seu acesso"
+        text="Carregando as unidades liberadas para sua conta…"
+        loading
+      />
+    );
+
+  if (selectionRequired)
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-8">
+        <section className="surface w-full max-w-3xl p-6 sm:p-8">
+          <div className="mb-6 flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
+              <Building2 className="size-5" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                ISP
+              </p>
+              <h1 className="text-xl font-semibold">
+                Escolha a unidade de trabalho
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Sua conta tem acesso a mais de uma unidade. Os estoques e
+                movimentos permanecem separados.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {units.map((unit) => (
+              <button
+                key={unit.id}
+                type="button"
+                className="surface flex min-h-24 items-center justify-between gap-4 p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                onClick={() => chooseUnit(unit.id)}
+              >
+                <span>
+                  <span className="block font-semibold">{unit.name}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Acessar estoque e operações desta unidade
+                  </span>
+                </span>
+                <Building2 className="size-5 shrink-0 text-primary" />
+              </button>
+            ))}
+          </div>
+          {(profile?.role === "admin" || profile?.role === "super_admin") && (
+            <Button
+              className="mt-4 w-full"
+              variant="outline"
+              onClick={() => {
+                if (profile)
+                  window.sessionStorage.setItem(
+                    `isp.unit-selection.${profile.user_id}`,
+                    "true",
+                  );
+                setSelectionRequired(false);
+                void router.navigate({ to: "/painel-geral" });
+              }}
+            >
+              <LayoutDashboard className="size-4" /> Abrir painel geral das
+              unidades
+            </Button>
+          )}
+          <Button
+            className="mt-4 w-full"
+            variant="ghost"
+            onClick={() => {
+              if (profile)
+                window.sessionStorage.removeItem(
+                  `isp.unit-selection.${profile.user_id}`,
+                );
+              void client?.auth.signOut();
+            }}
+          >
+            Sair da conta
+          </Button>
+        </section>
+      </main>
+    );
+
+  return <AppShell>{children}</AppShell>;
 }
 
 function Message({

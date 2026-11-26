@@ -273,7 +273,15 @@ export function AppHeader() {
                 <UserRound /> Meu perfil
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void client?.auth.signOut()}>
+            <DropdownMenuItem
+              onSelect={() => {
+                if (profile)
+                  window.sessionStorage.removeItem(
+                    `isp.unit-selection.${profile.user_id}`,
+                  );
+                void client?.auth.signOut();
+              }}
+            >
               <LogOut /> Sair do sistema
             </DropdownMenuItem>
           </DropdownMenuContent>

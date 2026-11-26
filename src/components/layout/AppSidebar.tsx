@@ -32,6 +32,8 @@ export function AppSidebar() {
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
       (item.to !== "/" || profile?.role !== "operator") &&
+      (!item.adminOnly ||
+        ["admin", "super_admin"].includes(profile?.role ?? "")) &&
       (!item.superAdminOnly || profile?.role === "super_admin") &&
       (!item.operatorOnly || profile?.role === "operator") &&
       (!item.stockExitWorkflow ||

@@ -16,6 +16,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as ConhecaIspRouteImport } from './routes/conheca-isp'
 import { Route as MovimentacoesRouteImport } from './routes/movimentacoes'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
+import { Route as PainelGeralRouteImport } from './routes/painel-geral'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanejamentoRouteImport } from './routes/planejamento'
 import { Route as PlanejamentoProducaoRouteImport } from './routes/planejamento-producao'
@@ -59,6 +60,11 @@ const MovimentacoesRoute = MovimentacoesRouteImport.update({
 const NotificacoesRoute = NotificacoesRouteImport.update({
   id: '/notificacoes',
   path: '/notificacoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PainelGeralRoute = PainelGeralRouteImport.update({
+  id: '/painel-geral',
+  path: '/painel-geral',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/painel-geral': typeof PainelGeralRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/planejamento-producao': typeof PlanejamentoProducaoRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/painel-geral': typeof PainelGeralRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/planejamento-producao': typeof PlanejamentoProducaoRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/conheca-isp': typeof ConhecaIspRoute
   '/movimentacoes': typeof MovimentacoesRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/painel-geral': typeof PainelGeralRoute
   '/perfil': typeof PerfilRoute
   '/planejamento': typeof PlanejamentoRoute
   '/planejamento-producao': typeof PlanejamentoProducaoRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/painel-geral'
     | '/perfil'
     | '/planejamento'
     | '/planejamento-producao'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/painel-geral'
     | '/perfil'
     | '/planejamento'
     | '/planejamento-producao'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/conheca-isp'
     | '/movimentacoes'
     | '/notificacoes'
+    | '/painel-geral'
     | '/perfil'
     | '/planejamento'
     | '/planejamento-producao'
@@ -227,6 +239,7 @@ export interface RootRouteChildren {
   ConhecaIspRoute: typeof ConhecaIspRoute
   MovimentacoesRoute: typeof MovimentacoesRoute
   NotificacoesRoute: typeof NotificacoesRoute
+  PainelGeralRoute: typeof PainelGeralRoute
   PerfilRoute: typeof PerfilRoute
   PlanejamentoRoute: typeof PlanejamentoRoute
   PlanejamentoProducaoRoute: typeof PlanejamentoProducaoRoute
@@ -286,6 +299,13 @@ declare module '@tanstack/react-router' {
       path: '/notificacoes'
       fullPath: '/notificacoes'
       preLoaderRoute: typeof NotificacoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/painel-geral': {
+      id: '/painel-geral'
+      path: '/painel-geral'
+      fullPath: '/painel-geral'
+      preLoaderRoute: typeof PainelGeralRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -374,6 +394,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConhecaIspRoute: ConhecaIspRoute,
   MovimentacoesRoute: MovimentacoesRoute,
   NotificacoesRoute: NotificacoesRoute,
+  PainelGeralRoute: PainelGeralRoute,
   PerfilRoute: PerfilRoute,
   PlanejamentoRoute: PlanejamentoRoute,
   PlanejamentoProducaoRoute: PlanejamentoProducaoRoute,
