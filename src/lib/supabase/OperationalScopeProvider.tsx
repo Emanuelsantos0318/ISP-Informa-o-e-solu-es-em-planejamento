@@ -81,15 +81,19 @@ export function OperationalScopeProvider({
   const canChooseUnit = Boolean(profile && availableUnits.length > 1);
   const unitId =
     profile?.unit_id === null
-      ? chosenUnitId
+      ? (availableUnits.find((unit) => unit.id === chosenUnitId)?.id ??
+        availableUnits[0]?.id ??
+        null)
       : (availableUnits.find((unit) => unit.id === chosenUnitId)?.id ??
         availableUnits[0]?.id ??
         profile?.unit_id ??
         null);
 
   useEffect(() => {
-    // Administradores sem unidade fixa recuperam a última unidade escolhida, se ainda válida.
-    if (!profile || !canChooseUnit || availableUnits.length === 0) return;
+    // Contas globais recebem uma unidade ativa automaticamente, inclusive
+    // quando a empresa possui somente uma unidade e o seletor não aparece.
+    if (!profile || profile.unit_id !== null || availableUnits.length === 0)
+      return;
     const stored = window.localStorage.getItem(
       `isp.unit.${profile.company_id}`,
     );
@@ -99,7 +103,7 @@ export function OperationalScopeProvider({
       const next = validStored ? stored : availableUnits[0]?.id;
       if (next) setChosenUnitId(next);
     }
-  }, [profile, canChooseUnit, availableUnits, chosenUnitId]);
+  }, [profile, availableUnits, chosenUnitId]);
 
   const setUnitId = useCallback(
     (id: string) => {

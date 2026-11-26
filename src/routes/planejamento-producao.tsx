@@ -2131,7 +2131,11 @@ function ProductionPlanningPage() {
     mutationFn: async () => {
       if (!client || !profile || !unitId)
         throw new Error("Selecione uma unidade.");
-      if (profile.role !== "admin" && profile.role !== "stock_manager")
+      if (
+        profile.role !== "admin" &&
+        profile.role !== "stock_manager" &&
+        profile.role !== "super_admin"
+      )
         throw new Error(
           "Somente administradores ou gestores podem configurar janelas.",
         );
@@ -2273,7 +2277,9 @@ function ProductionPlanningPage() {
         !client ||
         !profile ||
         !unitId ||
-        (profile.role !== "admin" && profile.role !== "stock_manager")
+        (profile.role !== "admin" &&
+          profile.role !== "stock_manager" &&
+          profile.role !== "super_admin")
       )
         throw new Error(
           "Somente administrador ou gestor pode configurar o prazo de degelo.",
@@ -3698,7 +3704,9 @@ function ProductionPlanningPage() {
               data continuam pendentes para alocação manual.
             </p>
           </Panel>
-          {(profile?.role === "admin" || profile?.role === "stock_manager") && (
+          {(profile?.role === "admin" ||
+            profile?.role === "stock_manager" ||
+            profile?.role === "super_admin") && (
             <Panel
               title="Configurar janelas de entrega"
               description="As faixas refletem os dias de consumo atendidos por cada entrega e podem ser ajustadas sem alterar os lançamentos históricos."
@@ -4083,7 +4091,9 @@ function ProductionPlanningPage() {
               </span>
             </div>
           </Panel>
-          {(profile?.role === "admin" || profile?.role === "stock_manager") && (
+          {(profile?.role === "admin" ||
+            profile?.role === "stock_manager" ||
+            profile?.role === "super_admin") && (
             <Panel
               title="Prazo padrão do produto"
               description="Uma regra cadastrada prevalece sobre o prazo digitado no agendamento. O padrão de 24 horas para peixe também é validado no banco."
@@ -5731,7 +5741,8 @@ function ProductionPlanningPage() {
                                   parsedQuantity < 0)) ||
                               importCandidate.isPending ||
                               (profile?.role !== "admin" &&
-                                profile?.role !== "stock_manager")
+                                profile?.role !== "stock_manager" &&
+                                profile?.role !== "super_admin")
                             }
                             onClick={() =>
                               importCandidate.mutate({
