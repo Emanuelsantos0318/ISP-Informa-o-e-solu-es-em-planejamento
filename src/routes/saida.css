@@ -1,8 +1,9 @@
 .exit-page {
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: calc(100vh - 4rem);
   flex-direction: column;
-  margin: -1.5rem -1rem 0;
   background: var(--color-background);
 }
 
@@ -15,7 +16,8 @@
 .exit-page__nav-wrap,
 .exit-page__content {
   width: 100%;
-  max-width: 76.25rem;
+  min-width: 0;
+  max-width: 88rem;
   margin-inline: auto;
 }
 
@@ -227,16 +229,12 @@
 }
 
 @media (min-width: 768px) {
-  .exit-page {
-    margin-inline: -1.5rem;
-  }
-
   .exit-page__header {
     padding-inline: 2rem;
   }
 
   .exit-page__content {
-    padding: 1.75rem 0 2rem;
+    padding: 1.75rem 1.5rem 2rem;
   }
 
   .exit-page__panel--padded {
@@ -249,10 +247,6 @@
 }
 
 @media (min-width: 1024px) {
-  .exit-page {
-    margin-inline: -2rem;
-  }
-
   .exit-page__selection {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }

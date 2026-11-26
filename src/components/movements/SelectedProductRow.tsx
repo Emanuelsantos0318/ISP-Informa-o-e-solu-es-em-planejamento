@@ -12,6 +12,7 @@ export function SelectedProductRow({
   product,
   mode,
   onAdd,
+  onAddAndSubmit,
   onCancel,
   initialQuantity = "",
   actionLabel = "Adicionar",
@@ -20,6 +21,7 @@ export function SelectedProductRow({
   product: Product;
   mode: "entrada" | "saida" | "ajuste" | "perda";
   onAdd: (item: Omit<MovementItemDraft, "key">) => void;
+  onAddAndSubmit?: ((item: Omit<MovementItemDraft, "key">) => void) | undefined;
   onCancel: () => void;
   initialQuantity?: string | undefined;
   actionLabel?: string | undefined;
@@ -41,7 +43,7 @@ export function SelectedProductRow({
       ? Number(qty.replace(",", ".")) / product.unitsPerPackage
       : null;
 
-  const add = () => {
+  const add = (submitAfterAdd = false) => {
     const n = Number(qty.replace(",", "."));
     if (!Number.isFinite(n) || n <= 0)
       return setError("Informe uma quantidade maior que zero.");
@@ -63,13 +65,15 @@ export function SelectedProductRow({
           `Unidades acima do saldo disponível (${product.balance} ${unitShort(product.unit)}).`,
         );
       setError(null);
-      onAdd({
+      const item = {
         product,
         quantity: packageQuantity,
         releasedUnits: n,
         lot: lot || undefined,
         expiry: expiry || undefined,
-      });
+      };
+      if (submitAfterAdd && onAddAndSubmit) onAddAndSubmit(item);
+      else onAdd(item);
       return;
     }
     if (unit && unit.decimals === 0 && !Number.isInteger(n))
@@ -83,12 +87,14 @@ export function SelectedProductRow({
     if ((mode === "entrada" || mode === "ajuste") && expiry && !lot.trim())
       return setError("Informe o lote para registrar a validade.");
     setError(null);
-    onAdd({
+    const item = {
       product,
       quantity: n,
       lot: lot || undefined,
       expiry: expiry || undefined,
-    });
+    };
+    if (submitAfterAdd && onAddAndSubmit) onAddAndSubmit(item);
+    else onAdd(item);
   };
 
   return (
@@ -213,9 +219,19 @@ export function SelectedProductRow({
             />
           </Field>
         )}
-        <Button type="button" onClick={add} disabled={submitting}>
+        <Button type="button" onClick={() => add()} disabled={submitting}>
           <Plus /> {actionLabel}
         </Button>
+        {mode === "saida" && onAddAndSubmit && (
+          <Button
+            type="button"
+            variant="success"
+            onClick={() => add(true)}
+            disabled={submitting}
+          >
+            Confirmar saída
+          </Button>
+        )}
       </div>
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Barcode,
+  ChevronDown,
   Clock3,
   History,
   Package2,
@@ -21,7 +22,10 @@ import { ProductFormDialog } from "@/components/cadastro/ProductFormDialog";
 import { SelectedProductRow } from "@/components/movements/SelectedProductRow";
 import { StockExitPlanManager } from "@/components/planning/StockExitPlanManager";
 import { MovementActions } from "@/components/movements/MovementActions";
-import type { MovementRequest } from "@/components/movements/MovementActions";
+import type {
+  ExitPlanPrefill,
+  MovementRequest,
+} from "@/components/movements/MovementActions";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { useOperationalScope } from "@/lib/supabase/OperationalScopeProvider";
 import { useCatalog } from "@/lib/supabase/useCatalog";
@@ -120,10 +124,11 @@ function OperatorExitPage() {
   const [pendingCreatedProductId, setPendingCreatedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pendingItems, setPendingItems] = useState<MovementItemDraft[]>([]);
-  const [exitPlanId, setExitPlanId] = useState<string | null>(null);
+  const [showExitPlans, setShowExitPlans] = useState(false);
   const [entryRequest, setEntryRequest] = useState<MovementRequest | null>(
     null,
   );
+  const [exitRequest, setExitRequest] = useState<MovementRequest | null>(null);
   const [activeTab, setActiveTab] = useState("registrar");
   const [tabPreferenceLoaded, setTabPreferenceLoaded] = useState(false);
   const [destination, setDestination] = useState<ExitDestinationCode | "">("");
@@ -332,38 +337,36 @@ function OperatorExitPage() {
   };
 
   // Preenche o lote em edição a partir do modelo diário selecionado.
-  const applyExitPlan = (plan: {
-    id: string;
-    name: string;
-    recipient: string;
-    notes: string | null;
-    products: Array<{ product: Product; quantity: number }>;
-  }) => {
+  const applyExitPlan = (plan: ExitPlanPrefill) => {
     if (pendingItems.length > 0 || selectedProduct) {
       setFormError(
         "Confirme ou limpe os itens atuais antes de carregar um modelo recorrente.",
       );
       return;
     }
-    setPendingItems(
-      plan.products.map(({ product, quantity }) => ({
-        key: createUuid(),
-        product,
-        quantity,
-        plannedQuantity: quantity,
-      })),
-    );
-    setExitPlanId(plan.id);
-    setRecipient(plan.recipient);
-    setSuccessMessage(
-      `Modelo “${plan.name}” carregado. Revise quantidades e destino antes de confirmar.`,
-    );
+    const firstProduct = plan.products[0]?.product;
+    if (!firstProduct) {
+      setFormError("Este modelo não possui produtos para liberar.");
+      return;
+    }
     setFormError(null);
+    setSuccessMessage(null);
+    setExitRequest({
+      key: createUuid(),
+      product: firstProduct,
+      type: "exit",
+      exitPlan: plan,
+    });
   };
 
   // Valida destino/período e envia todos os itens ao banco em uma operação atômica.
-  const recordExit = async () => {
-    if (pendingItems.length === 0) {
+  const recordExit = async (
+    additionalItem?: Omit<MovementItemDraft, "key"> | undefined,
+  ) => {
+    const itemsToRecord = additionalItem
+      ? [...pendingItems, { ...additionalItem, key: createUuid() }]
+      : pendingItems;
+    if (itemsToRecord.length === 0) {
       setFormError("Adicione pelo menos um produto ao registro.");
       return;
     }
@@ -375,20 +378,14 @@ function OperatorExitPage() {
       });
       return;
     }
-    if (exitPlanId && !recipient.trim()) {
-      setFormError(
-        "Informe o responsável pela retirada para registrar o uso do modelo.",
-      );
-      return;
-    }
     const totalByProduct = new Map<string, number>();
-    for (const item of pendingItems) {
+    for (const item of itemsToRecord) {
       totalByProduct.set(
         item.product.id,
         (totalByProduct.get(item.product.id) ?? 0) + item.quantity,
       );
     }
-    const insufficient = pendingItems.find(
+    const insufficient = itemsToRecord.find(
       (item) =>
         Math.round((totalByProduct.get(item.product.id) ?? 0) * 1000) >
         Math.round(item.product.balance * 1000),
@@ -429,8 +426,8 @@ function OperatorExitPage() {
         idempotencyKey: createUuid(),
         serviceCode: effectiveService,
         exitTypeCode: exitType,
-        exitPlanId,
-        items: pendingItems.map((item) => ({
+        exitPlanId: null,
+        items: itemsToRecord.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
           plannedQuantity: item.plannedQuantity,
@@ -443,11 +440,10 @@ function OperatorExitPage() {
         })),
       });
       setSuccessMessage(
-        `${pendingItems.length} item(ns) registrado(s) para ${exitDestinationLabel(destination)}.`,
+        `${itemsToRecord.length} item(ns) registrado(s) para ${exitDestinationLabel(destination)}.`,
       );
       setSelectedProduct(null);
       setPendingItems([]);
-      setExitPlanId(null);
       setFormError(null);
     } catch (error) {
       setFormError(
@@ -534,7 +530,26 @@ function OperatorExitPage() {
                   </Field>
                 )}
                 <div className="mt-4">
-                  <StockExitPlanManager compact onStart={applyExitPlan} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-expanded={showExitPlans}
+                    aria-controls="exit-plans-panel"
+                    onClick={() => setShowExitPlans((open) => !open)}
+                    className="gap-2"
+                  >
+                    <ChevronDown
+                      className={`size-4 transition-transform ${showExitPlans ? "rotate-180" : ""}`}
+                    />
+                    {showExitPlans
+                      ? "Ocultar saídas planejadas"
+                      : "Mostrar saídas planejadas"}
+                  </Button>
+                  {showExitPlans && (
+                    <div id="exit-plans-panel" className="mt-3">
+                      <StockExitPlanManager compact onStart={applyExitPlan} />
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -687,10 +702,11 @@ function OperatorExitPage() {
                       product={selectedProduct}
                       mode="saida"
                       initialQuantity="1"
-                      actionLabel="Adicionar ao registro"
+                      actionLabel="Adicionar produto"
                       submitting={movement.isPending}
                       onCancel={() => setSelectedProduct(null)}
                       onAdd={addPendingExitItem}
+                      onAddAndSubmit={(item) => void recordExit(item)}
                     />
                   </div>
                 )}
@@ -713,7 +729,6 @@ function OperatorExitPage() {
                         variant="ghost"
                         onClick={() => {
                           setPendingItems([]);
-                          setExitPlanId(null);
                           setFormError(null);
                           setSuccessMessage(null);
                         }}
@@ -760,12 +775,6 @@ function OperatorExitPage() {
                                   (row) => row.key !== item.key,
                                 );
                                 setPendingItems(next);
-                                if (
-                                  !next.some(
-                                    (row) => row.plannedQuantity != null,
-                                  )
-                                )
-                                  setExitPlanId(null);
                               }}
                               disabled={movement.isPending}
                             >
@@ -998,6 +1007,7 @@ function OperatorExitPage() {
         onCreated={setPendingCreatedProductId}
       />
       <MovementActions hideButtons request={entryRequest} />
+      <MovementActions hideButtons request={exitRequest} />
     </div>
   );
 }
